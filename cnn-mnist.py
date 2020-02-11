@@ -19,47 +19,42 @@ loss_func = F.cross_entropy
 class convolutionFunction(Function):
 
     @staticmethod
-    def forward(context,input,weight,bias=None):
-        # print(bias.shape)
-        # out = nn.functional.conv2d(input,weight,bias)
-        #  print(out[0][2][3][1])
+    def forward(context,input,weight,bias):
         context.save_for_backward(input,weight,bias)
-        # weight = torch.Tensor(8,1,kernel_size,kernel_size)
-        # print(weight.shape)
         N,C,h,w = input.shape
         out_channels,_,hf,wf = weight.shape
         out = torch.Tensor(N,out_channels,h-hf+1,w-wf+1).cuda() # cuda
-        # h = 10, w = 10, hf = self.kernel_size, wf = self.kernel_size
+        outTest = torch.zeros(N,out_channels,h-hf+1,w-wf+1).cuda()
         for i in range(0,h-hf+1):
             for j in range(0,w-wf+1):
-                # print(i,i+hf)
-                # print(input[n][:,i:i+hf,j:j+wf].shape,weight[c][:][:][:].shape)
                 out[:,:,i,j] = (input[:,None,:,i:i+hf,j:j+wf] * weight[None,:,:,:,:]).sum((2,3,4))
         out = out[:,:,:,:] + bias[None,:,None,None]
-        # print(out[0][2][3][1])
+        #outTest = torch.zeros(512,8,24,24).cuda()
         return out
 	
     @staticmethod
     def backward(context,grad_output):
         #print('backward called',grad_output.shape)
         input,weight,bias = context.saved_tensors
-        grad_bias = grad_output.sum((2,3))
-        grad_input, grad_weight = torch.Tensor(input.shape).cuda(),torch.Tensor(512,weight.shape[0],weight.shape[1],weight.shape[2],weight.shape[3]).cuda() #cuda for both
+        grad_bias = grad_output.sum((0,2,3)) / batch_size
+        grad_input, grad_weight = torch.Tensor(input.shape).cuda(),torch.Tensor(weight.shape).cuda() #cuda for both
         out_channels,in_channels,k,_ = weight.shape
         _,_,hf,wf = grad_output.shape
         for i in range(0,k):
             for j in range(0,k):
-                # print(input[:,c,i:i+hf,j:j+wf].shape, grad_output[:,f,:,:].shape)
-                grad_weight[:,:,:,i,j] = (input[:,None,:,i:i+hf,j:j+wf] * grad_output[:,:,None,:,:]).sum((3,4))
+                grad_weight[:,:,i,j] = (input[:,None,:,i:i+hf,j:j+wf] * grad_output[:,:,None,:,:]).sum((0,3,4))
         
+        grad_weight/=batch_size
+
         pad = (k-1,k-1,k-1,k-1)
         out = F.pad(grad_output, pad, "constant", 0).cuda() #cuda
         torch.flip(weight,[2,3])
         _,_,h0,w0 = out.shape
         for i in range(0,h0-k+1):
             for j in range(0,w0-k+1):
-                # print(out[n,:,i:i+hf,j:j+wf].shape, weight[:,c,:,:].shape)
-                grad_input[:,:,i,j] = (out[:,:,None,i:i+k,j:j+k] * weight[None,:,:,:,:]).sum((1,3,4)) 
+                grad_input[:,:,i,j] = (out[:,:,None,i:i+k,j:j+k] * weight[None,:,:,:,:]).sum((1,3,4))
+        
+        grad_input/=out_channels
         return grad_input,grad_weight,grad_bias
 
 class myconv2d(nn.Conv2d):
@@ -106,9 +101,16 @@ torch.cuda.set_device(device)
 
 model = get_cnn_model(data)
 
-opt = optim.SGD(model.parameters(), lr=0.1)
+opt = optim.SGD(model.parameters(), lr=0.2)
 learn = Learn(model, opt, loss_func, data)
 cbfs = [CudaCallback(),AvgStatsCallback()] #cuda
 run = Runner(learn,cbs = cbfs)
-#print(test)
+
+'''# torch.cuda.tensor(512,1,8,5,requires_grad=True).normal_()
+testInput = torch.randn(512,1,8,5,dtype=torch.double,requires_grad=True).cuda()
+weight_test = Parameter(torch.randn(8,1,5,5,dtype=torch.double,requires_grad=True).cuda()) #cuda
+nn.init.kaiming_uniform_(weight_test, a=math.sqrt(3))
+bias_test = torch.randn(8,dtype=torch.double,requires_grad=True).cuda()
+test = gradcheck(convolutionFunction.apply, (bias_test), eps=1e-4, atol=1e-4)
+print(test)'''
 run.fit(25)
