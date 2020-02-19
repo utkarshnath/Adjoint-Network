@@ -11,7 +11,7 @@ from torch.nn.parameter import Parameter
 import math
 from torch.autograd import gradcheck
 
-batch_size = 2
+batch_size = 1
 c = 8
 data = get_data_bunch(batch_size)
 loss_func = F.cross_entropy
@@ -23,10 +23,13 @@ bias = torch.Tensor(8).cuda()
 class convolutionFunction(Function):
 
     @staticmethod
-    def forward(context,input,weight,bias=None):
+    def forward(context,input,weight,bias,mask):
+        #context.padding = padding
+        #pad = (padding,padding,padding,padding)
         context.save_for_backward(input,weight,bias)
         N,C,h,w = input.shape
         out_channels,_,hf,wf = weight.shape
+        weight = weight*mask
         out = torch.Tensor(N,out_channels,h-hf+1,w-wf+1).cuda() # cuda
         for i in range(0,h-hf+1):
             for j in range(0,w-wf+1):
@@ -46,7 +49,7 @@ class convolutionFunction(Function):
             for j in range(0,k):
                 # print(input[:,c,i:i+hf,j:j+wf].shape, grad_output[:,f,:,:].shape)
                 grad_weight[:,:,i,j] = ((input[:,None,:,i:i+hf,j:j+wf] * grad_output[:,:,None,:,:]).sum((0,3,4))) / batch_size
-
+        grad_weight = grad_weight * mask
         pad = (k-1,k-1,k-1,k-1)
         out = F.pad(grad_output, pad, "constant", 0).cuda() #cuda
         weight = torch.flip(weight,[2,3])
@@ -87,6 +90,7 @@ class myconv2d(nn.Conv2d):
 class conv2d(nn.Conv2d):
     def __init(self,*kargs,**kwargs):
        super(conv2d, self).__init__()
+       self.padding = padding
 
     def forward(self,input):
         #print("forward - conv2d",input)
@@ -131,8 +135,8 @@ def get_my_cnn_model(data):
 def get_cnn_model(data):
     return nn.Sequential(
         Lambda(mnist_resize),
-        conv2d( 1, 2, 2, padding=0,stride=1), nn.ReLU(), #14
-        conv2d( 2,2, 2, padding=0,stride=1), nn.ReLU(), # 7
+        nn.Conv2d( 1, 2, 2, padding=0,stride=1), nn.ReLU(), #14
+        nn.Conv2d( 2,2, 2, padding=1,stride=1), nn.ReLU(), # 7
         #conv2d(16,32, 3, padding=0,stride=1), nn.ReLU(), # 4
         #conv2d(32,32, 3, padding=0,stride=1), nn.ReLU(), # 2
         #nn.AdaptiveAvgPool2d(1),
