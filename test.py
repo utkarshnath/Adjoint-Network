@@ -23,43 +23,60 @@ bias = torch.Tensor(8).cuda()
 class convolutionFunction(Function):
 
     @staticmethod
-    def forward(context,input,weight,bias,mask):
-        #context.padding = padding
-        #pad = (padding,padding,padding,padding)
+    def forward(context,input,weight,bias,padding,stride):
+        print("Forward")
+        context.padding = padding
+        context.stride = stride
+        pad = (padding,padding,padding,padding)
+        input = F.pad(input,pad,"constant",0).cuda()        
         context.save_for_backward(input,weight,bias)
         N,C,h,w = input.shape
         out_channels,_,hf,wf = weight.shape
-        weight = weight*mask
-        out = torch.Tensor(N,out_channels,h-hf+1,w-wf+1).cuda() # cuda
-        for i in range(0,h-hf+1):
-            for j in range(0,w-wf+1):
-                out[:,:,i,j] = (input[:,None,:,i:i+hf,j:j+wf] * weight[None,:,:,:,:]).sum((2,3,4))
+        #weight = weight*mask
+        output_size = (h-hf)//stride + 1
+        out = torch.Tensor(N,out_channels,output_size,output_size).cuda() # cuda
+        for i in range(0,output_size):
+            for j in range(0,output_size):
+                istart = i*stride
+                jstart = j*stride
+                out[:,:,i,j] = (input[:,None,:,istart:istart+hf,jstart:jstart+wf] * weight[None,:,:,:,:]).sum((2,3,4))
         out = out[:,:,:,:] + bias[None,:,None,None]
         return out
 
     @staticmethod
     def backward(context,grad_output):
+        #print(Backward)
         input,weight,bias = context.saved_tensors
-        grad_bias = grad_output.sum((0,2,3)) / batch_size
-        
+        grad_bias = grad_output.sum((0,2,3))
+        padding = context.padding
+        stride = context.stride
         grad_input, grad_weight = torch.Tensor(input.shape).cuda(),torch.Tensor(weight.shape).cuda() #cuda for both
         out_channels,in_channels,k,_ = weight.shape
-        _,_,hf,wf = grad_output.shape
+        n,f,h0,w0 = grad_output.shape
         for i in range(0,k):
             for j in range(0,k):
                 # print(input[:,c,i:i+hf,j:j+wf].shape, grad_output[:,f,:,:].shape)
-                grad_weight[:,:,i,j] = ((input[:,None,:,i:i+hf,j:j+wf] * grad_output[:,:,None,:,:]).sum((0,3,4))) / batch_size
-        grad_weight = grad_weight * mask
-        pad = (k-1,k-1,k-1,k-1)
-        out = F.pad(grad_output, pad, "constant", 0).cuda() #cuda
+                grad_weight[:,:,i,j] = ((input[:,None,:,i:i+h0*stride:stride,j:j+w0*stride:stride] * grad_output[:,:,None,:,:]).sum((0,3,4)))
+        #grad_weight = grad_weight * mask
+        
+        #pad = (k-1,k-1,k-1,k-1)
+        #out = F.pad(grad_output, pad, "constant", 0).cuda() #cuda
+       
         weight = torch.flip(weight,[2,3])
-        _,_,h0,w0 = out.shape
-        for i in range(0,h0-k+1):
-            for j in range(0,w0-k+1):
+        length = 2*(k-1) + h0 + (h0-1)*(stride-1)
+        out = torch.zeros(n,f,length,length).cuda()
+        for i in range(0,h0):
+            for j in range(0,w0):
+                out[:,:,k-1+(i*stride),k-1+(j*stride)] = grad_output[:,:,i,j]
+        _,_,h,w = input.shape
+        for i in range(0,h):
+            for j in range(0,w):
                 # print(out[n,:,i:i+hf,j:j+wf].shape, weight[:,c,:,:].shape)
                 grad_input[:,:,i,j] = (out[:,:,None,i:i+k,j:j+k] * weight[None,:,:,:,:]).sum((1,3,4))
         #print(grad_input)
-        return grad_input,grad_weight,grad_bias
+        if padding==0:
+           return grad_input,grad_weight,grad_bias,None,None
+        return grad_input[:,:,padding:-padding,padding:-padding],grad_weight,grad_bias,None,None
 
 class myconv2d(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,*kargs,**kwargs):
@@ -71,6 +88,7 @@ class myconv2d(nn.Conv2d):
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(3))
 
     def forward(self,input):
+        print("Forward called")
         #testInput = torch.randn(512,1,8,5,dtype=torch.double,requires_grad=True)
         #test = gradcheck(convolutionFunction.apply, (testInput,self.weight,self.bias), eps=1e-6, atol=1e-4)
         #print(test)
@@ -80,12 +98,14 @@ class myconv2d(nn.Conv2d):
            weight1 = self.weight
            bias1 = self.bias
            firstlayer = False
+           #print("firstlayer true",weight1)
         else:
            weight2 = self.weight
            bias2 = self.bias
            firstlayer = True
+           #print("firstlayer false",weight2)
         #print("forward",input)
-        return convolutionFunction().apply(input, self.weight,self.bias)
+        return convolutionFunction().apply(input, self.weight,self.bias,self.padding[0],self.stride[0])
 
 class conv2d(nn.Conv2d):
     def __init(self,*kargs,**kwargs):
@@ -105,7 +125,8 @@ class conv2d(nn.Conv2d):
            firstlayer = True
         #print(input.shape," ",self.weight.shape)
         # self.input = input
-        return F.conv2d(input, self.weight,self.bias)
+        #print("weight",self.weight)
+        return F.conv2d(input, self.weight,self.bias,self.stride,self.padding)
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -123,8 +144,8 @@ def mnist_resize(x): return x.view(-1, 1, 4, 4)
 def get_my_cnn_model(data):
     return nn.Sequential(
         Lambda(mnist_resize),
-        myconv2d( 1, 2, 2, padding=0,stride=1), nn.ReLU(), #14
-        myconv2d( 2,2, 2, padding=0,stride=1), nn.ReLU(), # 7
+        myconv2d( 1, 2, 2, padding=2,stride=2), nn.ReLU(), #14
+        myconv2d( 2,2, 2, padding=1,stride=2), nn.ReLU(), # 7
         # myconv2d(16,32, 3, padding=0,stride=1), nn.ReLU(), # 4
         # myconv2d(32,32, 3, padding=0,stride=1), nn.ReLU(), # 2
         #nn.AdaptiveAvgPool2d(1),
@@ -135,8 +156,8 @@ def get_my_cnn_model(data):
 def get_cnn_model(data):
     return nn.Sequential(
         Lambda(mnist_resize),
-        nn.Conv2d( 1, 2, 2, padding=0,stride=1), nn.ReLU(), #14
-        nn.Conv2d( 2,2, 2, padding=1,stride=1), nn.ReLU(), # 7
+        conv2d( 1, 2, 2, padding=2,stride=2), nn.ReLU(), #14
+        conv2d( 2,2, 2, padding=1,stride=2), nn.ReLU(), # 7
         #conv2d(16,32, 3, padding=0,stride=1), nn.ReLU(), # 4
         #conv2d(32,32, 3, padding=0,stride=1), nn.ReLU(), # 2
         #nn.AdaptiveAvgPool2d(1),
@@ -169,9 +190,9 @@ opt = optim.SGD(model.parameters(), lr=0.4)
 learn = Learn(model, opt, loss_func, data)
 cbfs = [CudaCallback(),AvgStatsCallback(),GradientPrintCallback()] #cuda
 run = Runner(learn,cbs = cbfs)
-model[1].register_forward_hook(printForward)
+#model[1].register_forward_hook(printForward)
 model[1].register_backward_hook(printForward)
-model[3].register_forward_hook(printForward)
+#model[3].register_forward_hook(printForward)
 model[3].register_backward_hook(printBackward)
 run.fit(1)
 #input,output = ginput,goutput
@@ -180,9 +201,9 @@ model1 = get_cnn_model(data)
 opt1 = optim.SGD(model1.parameters(), lr=0.4)
 learn1 = Learn(model1, opt1, loss_func, data)
 run1 = Runner(learn1,cbs = cbfs)
-model1[1].register_forward_hook(printForward)
+#model1[1].register_forward_hook(printForward)
 model1[1].register_backward_hook(printForward)
-model1[3].register_forward_hook(printForward)
+#model1[3].register_forward_hook(printForward)
 model1[3].register_backward_hook(printBackward)
 run1.fit(1)
 #input1,output1 = ginput,goutput

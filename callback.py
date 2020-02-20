@@ -23,7 +23,7 @@ class CudaCallback(CallBacks):
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
 class GradientPrintCallback(CallBacks):
-    def after_batch(self):
+    def before_step(self):
         pass  # print("callback called")
         #print('weight',self.model[1].weight,'\n')
         #print('bias', self.model[1].bias,'\n')

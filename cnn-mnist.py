@@ -27,7 +27,6 @@ class convolutionFunction(Function):
         weight = weight*mask
         pad = (padding,padding,padding,padding)
         input = F.pad(input,pad,"constant",0).cuda()
-        #print('Input shape',input.shape)
         context.save_for_backward(input,weight,bias)
         N,C,h,w = input.shape
         out_channels,_,hf,wf = weight.shape
@@ -39,36 +38,36 @@ class convolutionFunction(Function):
                 jstart = j*stride
                 out[:,:,i,j] = (input[:,None,:,istart:istart+hf,jstart:jstart+wf] * weight[None,:,:,:,:]).sum((2,3,4))
         out = out[:,:,:,:] + bias[None,:,None,None]
-        #print("weight shape",weight.shape)
-        #print("output shpae",out.shape)
         return out
 	
     @staticmethod
     def backward(context,grad_output):
-        #print('output',grad_output.shape)
         input,weight,bias= context.saved_tensors
         stride = context.stride
         padding = context.padding
         mask = context.mask
-        #print("Backward method")
         grad_bias = grad_output.sum((0,2,3)) 
-        grad_input, grad_weight = torch.Tensor(input.shape).cuda(),torch.Tensor(weight.shape).cuda() #cuda for both
+        grad_input, grad_weight = torch.zeros(input.shape).cuda(),torch.zeros(weight.shape).cuda() #cuda for both
         out_channels,in_channels,k,_ = weight.shape
-        _,_,hf,wf = grad_output.shape
+        n,f,h0,w0 = grad_output.shape
         for i in range(0,k):
             for j in range(0,k):
-                grad_weight[:,:,i,j] = ((input[:,None,:,i:i+hf*stride:stride,j:j+wf*stride:stride] * grad_output[:,:,None,:,:]).sum((0,3,4)))
-        #grad_weight*=mask
-        pad = (k-1,k-1,k-1,k-1)
-        out = F.pad(grad_output, pad, "constant", 0).cuda() #cuda
+                grad_weight[:,:,i,j] = ((input[:,None,:,i:i+h0*stride:stride,j:j+w0*stride:stride] * grad_output[:,:,None,:,:]).sum((0,3,4)))
+        #grad_weight*=mask  - not doing this as weights get masked automatically in forward pass
+        weight = weight*mask 
         weight = torch.flip(weight,[2,3])
-        _,_,h0,w0 = out.shape
-        for i in range(0,h0-k+1):
-            for j in range(0,w0-k+1):
-                grad_input[:,:,i,j] = (out[:,:,None,i:i+k,j:j+k] * weight[None,:,:,:,:]).sum((1,3,4)) 
-        #print('input grad',grad_input.shape)
-        #print('weight grad',grad_weight.shape)
-        #print('bias grad',grad_bias.shape)
+        # need padding of (kernel-1) size and each output should be seperated by (stride-1)
+        length = 2*(k-1) + h0 + (h0-1)*(stride-1)
+        out = torch.zeros(n,f,length,length).cuda()
+        for i in range(0,h0):
+            for j in range(0,w0):
+                out[:,:,k-1+(i*stride),k-1+(j*stride)] = grad_output[:,:,i,j]
+       
+        _,_,h,w = input.shape
+        outLength = (length - k) + 1
+        for i in range(0,outLength):
+            for j in range(0,outLength):
+                grad_input[:,:,i,j] = (out[:,:,None,i:i+k,j:j+k] * weight[None,:,:,:,:]).sum((1,3,4))
         if padding==0:
            return grad_input,grad_weight,grad_bias,None,None,None
         return grad_input[:,:,padding:-padding,padding:-padding],grad_weight,grad_bias,None,None,None
@@ -109,10 +108,10 @@ def mnist_resize(x): return x.view(-1, 1, 28, 28)
 def get_cnn_model(data):
     return nn.Sequential(
         Lambda(mnist_resize),
-        myconv2d( 1, 8, 5, padding=0,stride=1), nn.ReLU(), #14
-        myconv2d( 8,16, 3, padding=0,stride=1), nn.ReLU(), # 7
-        myconv2d(16,32, 3, padding=0,stride=1), nn.ReLU(), # 4
-        myconv2d(32,32, 3, padding=0,stride=1), nn.ReLU(), # 2
+        myconv2d( 1, 8, 5, padding=2,stride=2), nn.ReLU(), #14
+        myconv2d( 8,16, 3, padding=1,stride=2), nn.ReLU(), # 7
+        myconv2d(16,32, 3, padding=1,stride=2), nn.ReLU(), # 4
+        myconv2d(32,32, 3, padding=1,stride=2), nn.ReLU(), # 2
         nn.AdaptiveAvgPool2d(1),
         Lambda(flatten),
         nn.Linear(32,c)
@@ -127,9 +126,8 @@ torch.cuda.set_device(device)
 
 model = get_cnn_model(data)
 
-opt = optim.SGD(model.parameters(), lr=0.1)
+opt = optim.SGD(model.parameters(), lr=0.4)
 learn = Learn(model, opt, loss_func, data)
 cbfs = [CudaCallback(),AvgStatsCallback(),GradientPrintCallback()] #cuda
 run = Runner(learn,cbs = cbfs)
-#print(test)
 run.fit(35)
