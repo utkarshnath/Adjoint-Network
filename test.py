@@ -20,6 +20,12 @@ firstlayer = True
 weight = torch.Tensor(8,1,5,5).cuda()
 bias = torch.Tensor(8).cuda()
 
+def internal_padding(x, stride):
+    w = x.new_zeros(stride, stride)
+    w[0, 0] = 1
+    return F.conv_transpose2d(x, w.expand(x.size(1), 1, stride, stride), stride=stride)[:,:,0:1-stride,0:1-stride]
+
+
 class convolutionFunction(Function):
 
     @staticmethod
@@ -41,6 +47,11 @@ class convolutionFunction(Function):
                 jstart = j*stride
                 out[:,:,i,j] = (input[:,None,:,istart:istart+hf,jstart:jstart+wf] * weight[None,:,:,:,:]).sum((2,3,4))
         out = out[:,:,:,:] + bias[None,:,None,None]
+        unfold = torch.nn.Unfold(kernel_size=(hf,wf), padding=0, stride=stride)
+        unfolded_input = unfold(input)
+        unfold = torch.nn.Unfold(kernel_size=(hf,wf), padding=0, stride=1)
+        unfolded_wight = unfold(weight).transpose(2, 1)
+        out1 = (unfolded_wight[None,:,:,:,None]*unfolded_input[:,None,None,:,:]).sum((2,3)) + bias[None,:,None,None]
         return out
 
     @staticmethod
@@ -57,6 +68,12 @@ class convolutionFunction(Function):
             for j in range(0,k):
                 # print(input[:,c,i:i+hf,j:j+wf].shape, grad_output[:,f,:,:].shape)
                 grad_weight[:,:,i,j] = ((input[:,None,:,i:i+h0*stride:stride,j:j+w0*stride:stride] * grad_output[:,:,None,:,:]).sum((0,3,4)))
+        #unfold = torch.nn.Unfold(kernel_size=(h0,w0), padding=0, stride=stride)
+        #unfolded_input = unfold(input)
+        #unfold = torch.nn.Unfold(kernel_size=(h0,w0), padding=0, stride=1)
+        #unfolded_grad_output = unfold(grad_output).transpose(2, 1)
+        #grad_weight = unfolded_grad_output[:,:,:,None] * unfolded_input[:,None,:,:].sum(2)
+       
         #grad_weight = grad_weight * mask
         
         #pad = (k-1,k-1,k-1,k-1)
@@ -68,6 +85,13 @@ class convolutionFunction(Function):
         for i in range(0,h0):
             for j in range(0,w0):
                 out[:,:,k-1+(i*stride),k-1+(j*stride)] = grad_output[:,:,i,j]
+        
+        print("@@@@@@",out.shape)
+
+        output = internal_padding(grad_output,stride)
+        pad = (k-1,k-1,k-1,k-1)
+        out = F.pad(output,pad,"constant",0).cuda()
+        print('!!!!!!!!',out.shape)
         _,_,h,w = input.shape
         for i in range(0,h):
             for j in range(0,w):
@@ -191,20 +215,20 @@ learn = Learn(model, opt, loss_func, data)
 cbfs = [CudaCallback(),AvgStatsCallback(),GradientPrintCallback()] #cuda
 run = Runner(learn,cbs = cbfs)
 #model[1].register_forward_hook(printForward)
-model[1].register_backward_hook(printForward)
+#model[1].register_backward_hook(printForward)
 #model[3].register_forward_hook(printForward)
-model[3].register_backward_hook(printBackward)
+#model[3].register_backward_hook(printBackward)
 run.fit(1)
 #input,output = ginput,goutput
 print("****************************** Model1 ***************************")
 model1 = get_cnn_model(data)
 opt1 = optim.SGD(model1.parameters(), lr=0.4)
 learn1 = Learn(model1, opt1, loss_func, data)
-run1 = Runner(learn1,cbs = cbfs)
+#run1 = Runner(learn1,cbs = cbfs)
 #model1[1].register_forward_hook(printForward)
-model1[1].register_backward_hook(printForward)
+#model1[1].register_backward_hook(printForward)
 #model1[3].register_forward_hook(printForward)
-model1[3].register_backward_hook(printBackward)
+#model1[3].register_backward_hook(printBackward)
 run1.fit(1)
 #input1,output1 = ginput,goutput
 '''if torch.equal(input,input1):
