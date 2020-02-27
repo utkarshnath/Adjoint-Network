@@ -1,7 +1,7 @@
 import time, datetime
 import torch
 from run import CancelTrainException, CancelEpochException, CancelBatchException
-
+import matplotlib.pyplot as plt
 
 class CallBacks():
     _order = 0
@@ -59,7 +59,96 @@ class Stats():
             self.tol_metrics[i] += batch_size * metric(run.pred, run.yb)
         self.count += batch_size
 
+# should run after cuda but before everything else
+class ParamScheduler(CallBacks):
+    _order = 5
     
+    def __init__(self, pname, sched_func, using_torch_optim=False):
+        self.pname = pname
+        self.sched_func = sched_func 
+        self.iter = 0.0
+
+
+    def set_param(self):
+        self.iter += 1.0/self.iters
+        for p in self.opt.param_groups:
+            p[self.pname] = self.sched_func((self.iter+self.start_epoch)/self.epochs)
+   
+    def begin_batch(self): 
+        if self.in_train: self.set_param()
+
+
+# probably run after cuda 
+class LR_find(CallBacks):
+    _order = 1
+  
+    def __init__(self, max_iters=100, using_torch_optim=True):
+        self.using_torch_optim = using_torch_optim
+        self.max_iters = max_iters
+ 
+    def begin_fit(self, min_lr=1e-6, max_lr=10, tol_factor=10):
+        self.best_loss, self.tol_factor = (1e9, 0), tol_factor
+        self.min_lr, self.max_lr = min_lr, max_lr
+
+    def begin_batch(self):
+        if not self.in_train: return
+
+        pos = self.iter/self.max_iters
+        self.curr_lr = self.min_lr * (self.max_lr/self.min_lr) ** pos
+
+        hypers = self.opt.param_groups       
+        if not self.using_torch_optim:
+            hypers = self.opt.hypers 
+
+        for h in hypers:
+            h['lr'] = self.curr_lr
+        
+        if self.iter > self.max_iters:
+            raise CancelTrainException()   
+
+
+    def after_loss(self):
+        if not self.in_train: return
+        if self.loss < self.best_loss[0]:
+            self.best_loss = (self.loss, self.iter, self.curr_lr)
+
+        if self.loss >= self.tol_factor*self.best_loss[0]:
+            raise CancelTrainException()
+
+    def after_cancel_train(self):
+        print("Best loss value = {} at iteration = {}".format(self.best_loss[0], self.best_loss[1])) 
+        print("The learning rate was = {}".format(self.best_loss[2]))
+
+
+class Recorder(CallBacks):
+    _order = 20
+    
+    def __init__(self, using_torch_optim=True):
+        self.lrs = []
+        self.losses = []
+        self.using_torch_optim = using_torch_optim
+
+    def after_loss(self):
+        if not self.in_train: return
+        self.losses.append(self.loss.detach().cpu())
+
+    def after_batch(self):
+        if not self.in_train: return
+        
+        if self.using_torch_optim:
+            lr = self.opt.param_groups[-1]['lr'] 
+        else: 
+            lr = self.opt.hypers[-1]['lr']
+        self.lrs.append(lr)
+
+    def plot_lr(self): 
+        plt.plot(self.lrs)
+        plt.show()
+
+    def plot_loss(self):
+        plt.plot(self.losses)
+        plt.show()
+ 
 # should probably run at the end of other call backs
 class AvgStatsCallback(CallBacks):
     _order = 50

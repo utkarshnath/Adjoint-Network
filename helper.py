@@ -41,14 +41,13 @@ def get_stats(x):
 
 def get_data_bunch(batch_size):
     x_train, y_train, x_valid, y_valid = get_data()
-    print(x_train.size())
     train_mean, train_std = get_stats(x_train)
     x_train = normalize(x_train, train_mean, train_std)
     x_valid = normalize(x_valid, train_mean, train_std)
 
     train_ds = MNISTDataset(x_train[:,:], y_train)
     valid_ds = MNISTDataset(x_valid[:,:], y_valid)
-    train_dl = DataLoader(train_ds, batch_size, shuffle=False, drop_last=True)
+    train_dl = DataLoader(train_ds, batch_size, shuffle=True, drop_last=True)
     valid_dl = DataLoader(valid_ds, batch_size*2, shuffle=False)
 
     data = DataBunch(train_dl, valid_dl)

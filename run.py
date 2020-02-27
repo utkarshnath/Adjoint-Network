@@ -20,7 +20,6 @@ class Learn():
         self.loss_func, self.data = loss_func, data
 
 
-
 class CancelTrainException(Exception): pass
 class CancelEpochException(Exception): pass
 class CancelBatchException(Exception): pass
