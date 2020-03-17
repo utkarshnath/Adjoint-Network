@@ -18,8 +18,9 @@ def randomShape(a,c,l,b,percentage):
         weight[x1][x2][x3][x4] = 0
     return weight
 
-def swastik(l,b):
+def swastik(l):
     # all ones in 3*3
+    b = l
     weight = torch.zeros(l,b).cuda()
     for i in range(0,l):
         weight[l//2][i] = 1
@@ -31,6 +32,8 @@ def swastik(l,b):
         if(i>=b//2):
             weight[0][i] = 1
             weight[l-1][b-i-1] = 1
+    if(l==3):
+        weight[0][1] = weight[2][1] = weight[1][0] = weight[1][2] = 0
     return weight
 
 def star(l):
@@ -42,6 +45,8 @@ def star(l):
         weight[l//2][i] = 1
         weight[i][i] = 1
         weight[l-i-1][i] = 1
+    if(l==3):
+        weight[0][1] = weight[2][1] = weight[1][0] = weight[1][2] = 0
     return weight
 
 def circle(r):

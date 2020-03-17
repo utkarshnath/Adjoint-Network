@@ -51,6 +51,7 @@ class Runner():
             self.iter += 1
             self.xb, self.yb = xb, yb
             self.args = args
+         
             self.handle("begin_batch")
 
             self.pred = self.learn.model(self.xb) 

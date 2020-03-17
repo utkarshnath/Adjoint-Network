@@ -23,13 +23,13 @@ class CudaCallback(CallBacks):
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
 class GradientPrintCallback(CallBacks):
-    def before_step(self):
-        pass  # print("callback called")
+    def after_batch(self):
+        #pass  # print("callback called")
         #print('weight',self.model[1].weight,'\n')
         #print('bias', self.model[1].bias,'\n')
         #print('weight grad',self.model[1].weight.grad,'\n')
-        #self.learn.opt.zero_grad()
-        #if self.iter >= 1 : raise CancelTrainException()
+        self.learn.opt.zero_grad()
+        if self.iter >= 1 : raise CancelTrainException()
                          
 class Stats():
     def __init__(self, metrics, in_train):
