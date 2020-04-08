@@ -1,8 +1,9 @@
 import torch.nn as nn
 import torch.nn.init as init
 from myconv import myconv2d
-from mask import randomShape,swastik,star,circle,oval,firstLayerMasking,secondLayerMasking,thirdLayerMasking
+from mask import *
 
+randommask = 1
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -12,7 +13,7 @@ class Lambda(nn.Module):
     def forward(self, x): return self.func(x)
 
 def mnist_resize(x): return x.view(-1, 1, 28, 28)
-
+def cifar_resize(x): return x.view(-1, 3, 32, 32)
 def noop(x): return x
 
 class Flatten(nn.Module):
@@ -21,10 +22,11 @@ class Flatten(nn.Module):
 act_func = nn.ReLU()
 def conv(ni, no, ks, s=1, bias=False):
     if(ks==3):
-       mymask = randomShape(no,ni,3,3,0.9)
+       #mymask = circle(3)
+       mymask = randommask
     else:
        mymask = 1   
-    return myconv2d(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)
+    return myconv2d(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask=mymask)
 
 '''
 def init_cnn(m):
@@ -66,7 +68,7 @@ class ResBlock(nn.Module):
 class XResNet(nn.Sequential):
 
     @classmethod
-    def create(cls, expansion,  layers, c_in=1, c_out=10):
+    def create(cls, expansion,  layers, c_in=3, c_out=100):
         nbs = [c_in, 16,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1) 
                 for i in range(2)] 
@@ -77,7 +79,7 @@ class XResNet(nn.Sequential):
         res_layers = [cls._make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l)
             for i,l in enumerate(layers) ]
         
-        layers = [Lambda(mnist_resize), *stem, maxpool, *res_layers]
+        layers = [Lambda(cifar_resize), *stem, maxpool, *res_layers]
         layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), nn.Linear(nbs[-1]*expansion, c_out) ])
         
         resnet = cls(*layers)        
@@ -90,6 +92,9 @@ class XResNet(nn.Sequential):
             for i in range(number_block)] )
 
 
-def xresnet18 (**kwargs): return XResNet.create(1, [2, 2,  2, 2], **kwargs)
+def xresnet18 (mask,**kwargs):
+    global randommask 
+    randommask= mask
+    return XResNet.create(1, [2, 2,  2, 2], **kwargs)
 
 

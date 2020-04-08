@@ -153,7 +153,7 @@ class Recorder(CallBacks):
 class AvgStatsCallback(CallBacks):
     _order = 50
    
-    def __init__(self, metrics=[accuracy]):
+    def __init__(self, metrics=[accuracy,top_k_accuracy]):
         self.train_stats = Stats(metrics, True)
         self.valid_stats = Stats(metrics, False)    
         self.train_start_time, self.valid_start_time = None, None

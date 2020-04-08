@@ -21,53 +21,38 @@ class convolutionFunction(Function):
         context.padding = padding
         context.stride = stride
         context.mask = mask
+        
         weight = weight*mask
-        pad = (padding,padding,padding,padding)
-        input = F.pad(input,pad,"constant",0).cuda()
-        context.save_for_backward(input,weight,bias)
         N,C,h,w = input.shape
-        print(input.shape)
-        print(weight.shape)
         out_channels,_,hf,wf = weight.shape
-        output_size = (h-hf)//stride + 1
-        unfolded_input = torch._C._nn.im2col(input, (hf,wf),(1,1),(0,0),(stride,stride))
+        output_size = (h-hf+2*padding)//stride + 1
+        
+        unfolded_input = torch._C._nn.im2col(input, (hf,wf),(1,1),(padding,padding),(stride,stride))
         unfolded_weight = weight.view(out_channels,-1)
         out = unfolded_weight @ unfolded_input
         out = out.view(N,out_channels,output_size,output_size)
         out = out[:,:,:,:] + bias[None,:,None,None]
-        end = time.time()
+        context.save_for_backward(input,weight,bias,unfolded_input)
         return out
      
     @staticmethod
     def backward(context,grad_output):
-        start = time.time()
-        input,weight,bias= context.saved_tensors
+        input,weight,bias,unfolded_input = context.saved_tensors
         stride = context.stride
         padding = context.padding
         mask = context.mask
-        _,_,h,w = input.shape
-        out_channels,in_channels,k,_ = weight.shape
-        n,f,h0,w0 = grad_output.shape
-        # need padding of (kernel-1) size and each output should be seperated by (stride-1)
-        # length = 2*(k-1) + h0 + (h0-1)*(stride-1)
-        # out = torch.zeros(n,f,length,length).cuda()
-        # outLength = (length - k) + 1
-        end = time.time()
-        # print('Initial time ',end-start) 
+        n,_,h,w = input.shape
+        f,_,k,_ = weight.shape
 
         grad_bias = grad_output.sum((0,2,3))        
-        end1 = time.time()
-        # print('bias derivate ',end1-end)
-
         
-        unfolded_input = input.permute(1,0,2,3)
-        unfolded_input = torch._C._nn.im2col(unfolded_input, (h0,w0),(1,1),(0,0),(stride,stride))
-        unfolded_grad_output = grad_output.permute(1,0,2,3)
-        unfolded_grad_output = unfolded_grad_output.reshape(f,-1)
-        grad_weight = unfolded_grad_output @ unfolded_input
-        grad_weight = grad_weight.permute(1,0,2)
-        grad_weight = grad_weight.view(weight.shape)
-         
+        X_col = unfolded_input.permute(1,0,2)
+        X_col = X_col.reshape(X_col.shape[0],-1)
+        dout_reshaped = grad_output.permute(1, 0, 2, 3).reshape(f, -1)
+        dW = dout_reshaped @ X_col.T
+        grad_weight = dW.view(weight.shape)
+        
+ 
         weight = weight*mask 
         weight = weight.reshape(f,-1)
         unfolded_grad_output = grad_output.permute(1,0,2,3)
@@ -76,11 +61,9 @@ class convolutionFunction(Function):
         dx = dx.T
         dx = dx.reshape(n,-1,dx.shape[1])
         dx = dx.permute(0,2,1)
-        grad_input = torch._C._nn.col2im(dx,(h,w),(k,k),(1,1),(0,0),(stride,stride))
-        end3 = time.time()
-        if padding==0:
-           return grad_input,grad_weight,grad_bias,None,None,None
-        return grad_input[:,:,padding:-padding,padding:-padding],grad_weight,grad_bias,None,None,None
+        grad_input = torch._C._nn.col2im(dx,(h,w),(k,k),(1,1),(padding,padding),(stride,stride))
+        
+        return grad_input,grad_weight,grad_bias,None,None,None
 
 class myconv2d(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask=1,*kargs,**kwargs):

@@ -2,6 +2,15 @@ import random
 import torch
 
 
+def randomShape1(l,b,percentage):
+    weight = torch.ones(l,b).cuda()
+    n = int(l*b*percentage)
+    randomlist = random.sample(range(0,l*b),n)
+    for i in randomlist:
+        x = i//l
+        y = i%b  
+        weight[x][y] = 0
+    return weight 
 
 def randomShape(a,c,l,b,percentage):
     # mention percentage btw 0-1 to number of zeros

@@ -7,8 +7,8 @@ from IPython.core.debugger import set_trace
 import matplotlib.pyplot as plt
 from functools import partial
 from torch.utils.data import DataLoader, Dataset
-from datablock import make_rgb, np_to_float, to_byte_tensor, to_float_tensor
-from datablock import Data, ResizeFixed, RandomResizedCrop, CenterCrop, PilRandomFlip
+#from datablock import make_rgb, np_to_float, to_byte_tensor, to_float_tensor
+#from datablock import Data, ResizeFixed, RandomResizedCrop, CenterCrop, PilRandomFlip
 from run import DataBunch
 
 MNIST_URL='http://deeplearning.net/data/mnist/mnist.pkl'
@@ -74,12 +74,16 @@ def load_data(batch_size, image_size, isimagenet=False):
     print("Loaded data")
     return data
 
-def load_cifar_data(batch_size, image_size):
-
-    path = datasets.untar_data(URLs.CIFAR)
+def load_cifar_data(batch_size, image_size,size):
+    if size==10:
+       path = datasets.untar_data(URLs.CIFAR)
+    else:
+       path = datasets.untar_data(URLs.CIFAR_100)
     stats = (np.array([ 0.4914 ,  0.48216,  0.44653]), np.array([ 0.24703,  0.24349,  0.26159]))
     #tfms = tfms_from_stats(stats, image_size, aug_tfms=[RandomFlip()], pad=image_size//8)
-    data = ImageDataBunch.from_folder(path, valid='test', size=image_size, bs = batch_size)
+    
+    tfms = (get_transforms(do_flip=True,flip_vert=False,max_rotate=25))
+    data = ImageDataBunch.from_folder(path, valid='test', size=image_size,ds_tfms=tfms,bs = batch_size)
     # normalising the dataset using the same normalisation applied to the imagenet dataset
     data.normalize(imagenet_stats)
 
