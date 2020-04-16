@@ -11,8 +11,11 @@ from torch.nn.parameter import Parameter
 from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos
 from myconv import myconv2d
+from mylinear import linear
 from model import xresnet18
 import time
+from convFirstLayer import conv2dFirstLayer 
+from convFaster import conv2dFaster 
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -23,18 +26,19 @@ class Lambda(nn.Module):
 
 def flatten(x): return x.view(x.shape[0], -1)
 
+def flatten_parts(x): return x.view(x.shape[0],x.shape[1], -1)
+
 def mnist_resize(x): return x.view(-1, 1, 28, 28)
-def cifar_resize(x): return x.view(-1, 3, 32, 32)
 def get_cnn_model(data):
     return nn.Sequential(
         Lambda(mnist_resize),
-        myconv2d( 1, 8, 7, padding=2,stride=2), nn.ReLU(), #14
-        myconv2d( 8,16, 5, padding=1,stride=2), nn.ReLU(), # 7
-        myconv2d(16,16, 5, padding=1,stride=2), nn.ReLU(), # 4
+        conv2dFirstLayer( 1, 8, 5, padding=2,stride=2), nn.ReLU(), #14
+        conv2dFaster( 8,16, 3, padding=1,stride=2), nn.ReLU(), # 7
+        conv2dFaster(16,16, 3, padding=1,stride=2), nn.ReLU(), # 4
         #myconv2d(32,32, 5, padding=1,stride=2,mask=circle(5)), nn.ReLU(), # 2
-        nn.AdaptiveAvgPool2d(1),
+        #nn.AdaptiveAvgPool2d(1),
         Lambda(flatten),
-        nn.Linear(16,c)
+        linear(256,c),
     )
 
 def lenet():
@@ -47,7 +51,7 @@ def lenet():
         Lambda(flatten),
         nn.Linear(256,120),nn.ReLU(),
         nn.Linear(120,84),nn.ReLU(),
-        nn.Linear(84,c)
+        nn.Linear(84,c),
     )
 
 def conv2(data):
@@ -95,6 +99,51 @@ def conv6(data):
         nn.Linear(256,c)
     )
 
+'''
+class MyLoss(torch.autograd.Function):  
+    @staticmethod
+    def forward(ctx, pred, result):
+        print("pred",pred)
+        pred = pred.exp()/pred.exp().sum(-1,keepdim=True)
+        pred1 = pred[range(result.shape[0]), result]
+        pred_log = pred1.log()
+        nll = -pred_log.mean()
+        print("nll ",nll)
+        ctx.save_for_backward(pred, result)
+        return nll
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        pred, result = ctx.saved_tensors
+        return pred-1, result
+
+def nll1(pred, result): return -(pred[range(result.shape[0]), result]).mean()
+
+def nll(pred,result):
+    print(pred.shape)
+    pred = pred[0]
+    return -(pred[range(result.shape[0]), result]).mean()
+'''
+
+class MyCrossEntropy(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, output, target):
+        l,_ = output.shape
+        log_preds1 = F.log_softmax(output[:l//4], dim=-1)
+        log_preds2 = F.log_softmax(output[l//4:l//2], dim=-1)
+        log_preds3 = F.log_softmax(output[l//2:3*l//4], dim=-1)
+        log_preds4 = F.log_softmax(output[3*l//4:], dim=-1)
+        nll1 = F.nll_loss(log_preds1, target)
+        nll2 = F.nll_loss(log_preds2, target)
+        nll3 = F.nll_loss(log_preds3, target)
+        nll4 = F.nll_loss(log_preds4, target)
+        #return nll1 + torch.dist(output[:l//4],output[l//4:l//2]) + torch.dist(output[:l//4],output[l//2:3*l//4]) + torch.dist(output[:l//4],output[3*l//4:])
+        return nll1 + 0.1*(abs(nll1-nll2) + abs(nll1-nll3) + abs(nll1-nll4))
+
+# loss_func = F.cross_entropy
+
 if __name__ == "__main__":
    start = time.time() 
    device = torch.device('cuda',0)
@@ -102,9 +151,9 @@ if __name__ == "__main__":
    batch_size = 128
    c = 10
    data = get_data_bunch(batch_size)
-   loss_func = F.cross_entropy
+   loss_func = MyCrossEntropy()
    lr_finder = False
-   model = xresnet18()
+   model = get_cnn_model(data)
    end = time.time()
    print("Loaded model", end-start)
    lr = 0.1
@@ -118,7 +167,7 @@ if __name__ == "__main__":
       cbfs = [CudaCallback(),LR_find(max_iters=89),Recorder()]
 
    run = Runner(learn,cbs = cbfs)
-   run.fit(30)
+   run.fit(50)
    #print(model[1].weight)
    #print()
    #print(model[3].weight)

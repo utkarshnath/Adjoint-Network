@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.init as init
 from myconv import myconv2d
 from mask import *
+from convFaster import *
 
 randommask = 1
 
@@ -20,13 +21,15 @@ class Flatten(nn.Module):
     def forward(self, x): return x.view(x.size(0), -1)
 
 act_func = nn.ReLU()
+
+first = True
 def conv(ni, no, ks, s=1, bias=False):
-    if(ks==3):
-       #mymask = circle(3)
-       mymask = randommask
-    else:
-       mymask = 1   
-    return myconv2d(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask=mymask)
+    global first
+    if first:
+        first = False
+        return conv2dFirstLayer(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)
+        
+    return conv2dFaster(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)
 
 '''
 def init_cnn(m):
@@ -68,7 +71,7 @@ class ResBlock(nn.Module):
 class XResNet(nn.Sequential):
 
     @classmethod
-    def create(cls, expansion,  layers, c_in=3, c_out=100):
+    def create(cls, expansion,  layers, c_in=1, c_out=100):
         nbs = [c_in, 16,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1) 
                 for i in range(2)] 
@@ -79,7 +82,7 @@ class XResNet(nn.Sequential):
         res_layers = [cls._make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l)
             for i,l in enumerate(layers) ]
         
-        layers = [Lambda(cifar_resize), *stem, maxpool, *res_layers]
+        layers = [Lambda(mnist_resize), *stem, maxpool, *res_layers]
         layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), nn.Linear(nbs[-1]*expansion, c_out) ])
         
         resnet = cls(*layers)        
@@ -92,9 +95,9 @@ class XResNet(nn.Sequential):
             for i in range(number_block)] )
 
 
-def xresnet18 (mask,**kwargs):
+def xresnet18 (mask=1,**kwargs):
     global randommask 
-    randommask= mask
+    randommask = mask
     return XResNet.create(1, [2, 2,  2, 2], **kwargs)
 
 

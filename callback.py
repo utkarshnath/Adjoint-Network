@@ -11,8 +11,19 @@ class CallBacks():
     def __getattr__(self, k): 
         return getattr(self.run, k, None)
 
-
-def accuracy(out, yb): return (torch.argmax(out, dim=1)==yb).float().mean()    
+#dim changed from 1 to 2 for out  - parts 15,17
+def accuracy(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[:l//4], dim=1)==yb).float().mean()
+def accuracy1(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[l//4:l//2], dim=1)==yb).float().mean()
+def accuracy2(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[l//2:3*l//4], dim=1)==yb).float().mean()
+def accuracy3(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[3*l//4:], dim=1)==yb).float().mean()    
 def top_k_accuracy(out, yb, k=5):
     idx = out.topk(k=k, dim=1)[1]
     yb = yb.unsqueeze(dim=1).expand_as(idx)
@@ -153,7 +164,7 @@ class Recorder(CallBacks):
 class AvgStatsCallback(CallBacks):
     _order = 50
    
-    def __init__(self, metrics=[accuracy,top_k_accuracy]):
+    def __init__(self, metrics=[accuracy,accuracy1,accuracy2,accuracy3]):
         self.train_stats = Stats(metrics, True)
         self.valid_stats = Stats(metrics, False)    
         self.train_start_time, self.valid_start_time = None, None

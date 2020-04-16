@@ -61,10 +61,10 @@ class Runner():
             self.handle("after_loss")
             
             if not self.in_train: return 
-
+            #print("before_backward")
             self.handle("before_backward")                
             self.loss.backward()
-
+            #print("before_step")
             self.handle("before_step") 
             self.learn.opt.step()    
             
