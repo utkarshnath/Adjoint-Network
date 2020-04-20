@@ -15,9 +15,10 @@ class DataBunch():
 
 
 class Learn():
-    def __init__(self, model, opt, loss_func, data):
+    def __init__(self, model, opt, loss_func, data,model_big=None):
         self.model, self.opt = model, opt 
         self.loss_func, self.data = loss_func, data
+        self.model_big = model_big
 
 
 class CancelTrainException(Exception): pass
@@ -41,6 +42,9 @@ class Runner():
     def model(self): return self.learn.model
 
     @property
+    def model_big(self): return self.learn.model_big
+
+    @property
     def loss_func(self): return self.learn.loss_func
 
     @property
@@ -51,20 +55,23 @@ class Runner():
             self.iter += 1
             self.xb, self.yb = xb, yb
             self.args = args
-         
+             
             self.handle("begin_batch")
-
-            self.pred = self.learn.model(self.xb) 
+            self.pred = self.learn.model(self.xb)
+            #self.pred1 = self.learn.model(self.xb) 
+            #self.pred_big = self.learn.model_big(self.xb)
+            
+            #print(self.learn.model_big(torch.ones(64, 3, 128, 128).cuda()).sum()) 
             self.handle("after_pred")                
             
-            self.loss = self.learn.loss_func(self.pred, self.yb)
+            self.loss = self.learn.loss_func(self.pred,self.yb)
             self.handle("after_loss")
             
             if not self.in_train: return 
-            #print("before_backward")
+            
             self.handle("before_backward")                
             self.loss.backward()
-            #print("before_step")
+            
             self.handle("before_step") 
             self.learn.opt.step()    
             

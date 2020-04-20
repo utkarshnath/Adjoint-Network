@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 #from datablock import make_rgb, np_to_float, to_byte_tensor, to_float_tensor
 #from datablock import Data, ResizeFixed, RandomResizedCrop, CenterCrop, PilRandomFlip
 from run import DataBunch
+from datablock import *
 
 MNIST_URL='http://deeplearning.net/data/mnist/mnist.pkl'
 CIFAR10_URL = 'https://s3.amazonaws.com/fast-ai-imageclas/cifar10.tgz'
@@ -38,6 +39,7 @@ def get_stats(x):
     return mean, std
 
 def get_data_bunch(batch_size):
+    # MNIST
     x_train, y_train, x_valid, y_valid = get_data()
     
     train_mean, train_std = get_stats(x_train)
@@ -53,26 +55,6 @@ def get_data_bunch(batch_size):
 
     return data
 
-def load_data(batch_size, image_size, isimagenet=False):
-    '''
-    if isimagenet:
-        path = Path('/scratch/work/public/imagenet/train')
-    else:
-        path = datasets.untar_data(URLs.CIFAR)
-
-    train_transforms = [make_rgb, RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
-    #train_transforms = [make_rgb, ResizeFixed(image_size), PilRandomFlip(), to_byte_tensor, to_float_tensor]
-    valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]
-
-    data = Data(path, batch_size=batch_size)
-    '''
-    path = datasets.untar_data(URLs.CIFAR)
-    data = ImageDataBunch.from_folder(path, valid='test', size=image_size, bs = batch_size) 
-    # normalising the dataset using the same normalisation applied to the imagenet dataset
-    data.normalize(imagenet_stats)
-
-    print("Loaded data")
-    return data
 
 def load_cifar_data(batch_size, image_size,size):
     if size==10:
@@ -90,5 +72,21 @@ def load_cifar_data(batch_size, image_size,size):
     print("Loaded data")
     return data
 
+
+def load_data(batch_size, image_size, dataset=1):
+    if dataset==0:
+        path = Path('/scratch/work/public/imagenet/')
+    elif dataset==1:
+        path = datasets.untar_data(datasets.URLs.IMAGENETTE_160)
+    elif dataset==2:
+        path = datasets.untar_data(datasets.URLs.IMAGEWOOF_160)
+    
+    train_transforms = [make_rgb, RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
+    #train_transforms = [make_rgb, ResizeFixed(image_size), PilRandomFlip(), to_byte_tensor, to_float_tensor]
+    valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]    
+
+    data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=8)
+    print("Loaded data")
+    return data
 
 

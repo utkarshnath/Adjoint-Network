@@ -8,6 +8,9 @@ from collections import Iterable
 import math
 import numpy as np
 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -36,14 +39,13 @@ class ListManager():
         if len(self)>10: res = res[:-1]+ '...]'
         return res
 
-
 def get_files(path, extensions):
     path = Path(path)
 
-    files = [] 
+    files = []
     for p, ds, fs in os.walk(path):
         files += _get_files(p, fs, extensions)
-        
+
     return files
 
 
@@ -71,7 +73,7 @@ class ImageList(ListManager):
         if isinstance(idxs, list): return [self._get(v) for v in idxs]
         return self._get(idxs)
 
- 
+
 def path_to_label_vocab(path): return path.parent.name
 def create_label_vocab(image_list):
     labels_vocab = {}
@@ -80,7 +82,6 @@ def create_label_vocab(image_list):
         if name not in labels_vocab:
             labels_vocab[name] = len(labels_vocab)
     return labels_vocab
-
 
 class CuratedDataset(Dataset):
     def __init__(self, image_list, vocab=None):
@@ -91,69 +92,76 @@ class CuratedDataset(Dataset):
     def __len__(self): return len(self.x)
 
     def visualize(self, idx):
-        file_path = self.x.items[idx] 
+        file_path = self.x.items[idx]
         image = self.x.get(file_path)
-        
+
         return image, file_path
 
     def check_labels(self, number=10):
         print(self.__class__.__name__)
         for i in range(number):
             idx = random.randrange(len(self))
-            
+
             label = self.y[idx]
-            file_path = self.x.items[idx] 
-            
+            file_path = self.x.items[idx]
+
             print(file_path, label)
+
 
 class Data():
     def __init__(self, path, batch_size=128, image_transforms=None, valid_image_transforms=None, num_workers=4):
-        self.path, self.batch_size, self.num_workers  = path, batch_size, num_workers
-        self.create_dataset(image_transforms, image_transforms if valid_image_transforms is None else valid_image_transforms)    
-        
+        self.path = path
+        self.batch_size = batch_size
+        self.num_workers = num_workers
 
-    def create_dataset(self, train_image_transforms, valid_image_transforms):
-        self.train_list = ImageList(self.train_path, train_image_transforms)
-        self.valid_list = ImageList(self.valid_path, valid_image_transforms)
-        
-        self.vocab = create_label_vocab(self.train_list)
+        train_image_transforms = image_transforms
+        if valid_image_transforms is None: valid_image_transforms = image_transforms
 
-        self.train_ds = CuratedDataset(self.train_list, self.vocab)
-        print(self.train_list[0])
-        self.valid_ds = CuratedDataset(self.valid_list, self.vocab)
+        train_list = ImageList(self.train_path, train_image_transforms)
+        valid_list = ImageList(self.valid_path, valid_image_transforms)
+
+        vocab = create_label_vocab(train_list)
+
+        self.train_ds = CuratedDataset(train_list, vocab)
+        self.valid_ds = CuratedDataset(valid_list, vocab)
 
     @property
-    def train_path(self): return self.path/'train' 
+    def train_path(self): return self.path/'train'
     @property
-    def valid_path(self): return self.path/'test' 
+    def valid_path(self): return '/scratch/un270/val1'
+
+
+    #@property
+    #def train_path(self): return '/scratch/work/public/imagenet/train'
+    #@property
+    #def valid_path(self): return '/scratch/un270/val' 
 
     @property
     def train_dl(self): return DataLoader(self.train_ds, self.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=self.num_workers)
     @property
-    def valid_dl(self): return DataLoader(self.valid_ds, self.batch_size*2, shuffle=False, num_workers=self.num_workers) 
+    def valid_dl(self): return DataLoader(self.valid_ds, self.batch_size*2, shuffle=False, num_workers=self.num_workers)
 
 
-
-def make_rgb(item, *args): return item.convert('RGB')
+def make_rgb(item): return item.convert('RGB')
 
 class ResizeFixed():
     def __init__(self,size):
         if isinstance(size,int): size=(size,size)
         self.size = size
-        
-    def __call__(self, item, *args): return item.resize(self.size, PIL.Image.BILINEAR)
 
-def to_byte_tensor(item, *args):
+    def __call__(self, item): return item.resize(self.size, PIL.Image.BILINEAR)
+
+def to_byte_tensor(item):
     res = torch.ByteTensor(torch.ByteStorage.from_buffer(item.tobytes()))
     w,h = item.size
     return res.view(h,w,-1).permute(2,0,1)
-def to_float_tensor(item, *args): return item.float().div_(255.)
-def np_to_float(x, *args): return torch.from_numpy(np.array(x, dtype=np.float32, copy=False)).permute(2,0,1).contiguous()/255.
+def to_float_tensor(item): return item.float().div_(255.)
+def np_to_float(x): return torch.from_numpy(np.array(x, dtype=np.float32, copy=False)).permute(2,0,1).contiguous()/255.
 
 
 class PilRandomFlip():
     def __init__(self, p=0.5): self.p=p
-    def __call__(self, x, *args):
+    def __call__(self, x):
         return x.transpose(PIL.Image.FLIP_LEFT_RIGHT) if random.random()<self.p else x
 
 
@@ -164,25 +172,25 @@ def process_sz(sz):
 def default_crop_size(w,h): return [w,w] if w < h else [h,h]
 
 class GeneralCrop():
-    def __init__(self, size, crop_size=None, resample=PIL.Image.BILINEAR): 
+    def __init__(self, size, crop_size=None, resample=PIL.Image.BILINEAR):
         self.resample,self.size = resample,process_sz(size)
         self.crop_size = None if crop_size is None else process_sz(crop_size)
-        
+
     def default_crop_size(self, w,h): return default_crop_size(w,h)
 
-    def __call__(self, x, *args):
+    def __call__(self, x):
         csize = self.default_crop_size(*x.size) if self.crop_size is None else self.crop_size
         return x.transform(self.size, PIL.Image.EXTENT, self.get_corners(*x.size, *csize), resample=self.resample)
-    
+
     def get_corners(self, w, h): return (0,0,w,h)
 
 class CenterCrop(GeneralCrop):
     def __init__(self, size, scale=1.14, resample=PIL.Image.BILINEAR):
         super().__init__(size, resample=resample)
         self.scale = scale
-        
+
     def default_crop_size(self, w,h): return [w/self.scale,h/self.scale]
-    
+
     def get_corners(self, w, h, wc, hc):
         return ((w-wc)//2, (h-hc)//2, (w-wc)//2+wc, (h-hc)//2+hc)
 
@@ -190,7 +198,7 @@ class RandomResizedCrop(GeneralCrop):
     def __init__(self, size, scale=(0.08,1.0), ratio=(3./4., 4./3.), resample=PIL.Image.BILINEAR):
         super().__init__(size, resample=resample)
         self.scale,self.ratio = scale,ratio
-    
+
     def get_corners(self, w, h, wc, hc):
         area = w*h
         #Tries 5 times to get a proper crop inside the image.
@@ -203,8 +211,11 @@ class RandomResizedCrop(GeneralCrop):
                 left = random.randint(0, w - new_w)
                 top  = random.randint(0, h - new_h)
                 return (left, top, left + new_w, top + new_h)
-        
+
         # Fallback to squish
         if   w/h < self.ratio[0]: size = (w, int(w/self.ratio[0]))
         elif w/h > self.ratio[1]: size = (int(h*self.ratio[1]), h)
         else:                     size = (w, h)
+        return ((w-size[0])//2, (h-size[1])//2, (w+size[0])//2, (h+size[1])//2)
+
+

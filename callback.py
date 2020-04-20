@@ -1,5 +1,6 @@
 import time, datetime
 import torch
+import os
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
 
@@ -11,26 +12,48 @@ class CallBacks():
     def __getattr__(self, k): 
         return getattr(self.run, k, None)
 
-#dim changed from 1 to 2 for out  - parts 15,17
 def accuracy(out, yb):
     l,_ = out.shape
-    return (torch.argmax(out[:l//4], dim=1)==yb).float().mean()
+    return (torch.argmax(out[:l], dim=1)==yb).float().mean()
 def accuracy1(out, yb):
     l,_ = out.shape
-    return (torch.argmax(out[l//4:l//2], dim=1)==yb).float().mean()
+    return (torch.argmax(out[l//2:], dim=1)==yb).float().mean()
 def accuracy2(out, yb):
     l,_ = out.shape
     return (torch.argmax(out[l//2:3*l//4], dim=1)==yb).float().mean()
 def accuracy3(out, yb):
     l,_ = out.shape
     return (torch.argmax(out[3*l//4:], dim=1)==yb).float().mean()    
+
 def top_k_accuracy(out, yb, k=5):
-    idx = out.topk(k=k, dim=1)[1]
+    l,_ = out.shape
+    idx = out[:l].topk(k=k, dim=1)[1]
     yb = yb.unsqueeze(dim=1).expand_as(idx)
     return (yb == idx).max(dim=1)[0].float().mean()
 
+def top_k_accuracy1(out, yb, k=5):
+    l,_ = out.shape
+    idx = out[l//2:].topk(k=k, dim=1)[1]
+    yb = yb.unsqueeze(dim=1).expand_as(idx)
+    return (yb == idx).max(dim=1)[0].float().mean()
+
+def top_k_accuracy2(out, yb, k=5):
+    l,_ = out.shape
+    idx = out[l//2:3*l//4].topk(k=k, dim=1)[1]
+    yb = yb.unsqueeze(dim=1).expand_as(idx)
+    return (yb == idx).max(dim=1)[0].float().mean()
+
+def top_k_accuracy3(out, yb, k=5):
+    l,_ = out.shape
+    idx = out[3*l//4:].topk(k=k, dim=1)[1]
+    yb = yb.unsqueeze(dim=1).expand_as(idx)
+    return (yb == idx).max(dim=1)[0].float().mean()
+
+
 class CudaCallback(CallBacks):
-    def begin_fit(self): self.model.cuda()
+    def begin_fit(self):
+        self.model.cuda()
+        #self.model_big.cuda()
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
 class GradientPrintCallback(CallBacks):
@@ -114,14 +137,15 @@ class LR_find(CallBacks):
         for h in hypers:
             h['lr'] = self.curr_lr
         
-        if self.iter > self.max_iters:
-            raise CancelTrainException()   
-
+        if self.iter >= self.max_iters:
+           print("##################") 
+           raise CancelTrainException()
 
     def after_loss(self):
         if not self.in_train: return
         if self.loss < self.best_loss[0]:
             self.best_loss = (self.loss, self.iter, self.curr_lr)
+            print(self.best_loss)
 
         if self.loss >= self.tol_factor*self.best_loss[0]:
             raise CancelTrainException()
@@ -159,12 +183,25 @@ class Recorder(CallBacks):
     def plot_loss(self):
         plt.plot(self.losses)
         plt.show()
- 
+
+class SaveModelCallback(CallBacks):
+    def __init__(self,name,save_dir="/scratch/un270/"):
+        model_directory = os.path.join(save_dir, "models")
+        self.name = name
+        if not os.path.isdir(model_directory):
+            os.mkdir(model_directory)   
+        self.model_directory = model_directory
+
+    def after_epoch(self):
+        if self.epoch>50:
+           curr_name = os.path.join(self.model_directory, self.name + str(self.epoch)+".pt")
+           torch.save(self.learn.model.state_dict(), curr_name) 
+
 # should probably run at the end of other call backs
 class AvgStatsCallback(CallBacks):
     _order = 50
    
-    def __init__(self, metrics=[accuracy,accuracy1,accuracy2,accuracy3]):
+    def __init__(self, metrics=[accuracy,top_k_accuracy]):
         self.train_stats = Stats(metrics, True)
         self.valid_stats = Stats(metrics, False)    
         self.train_start_time, self.valid_start_time = None, None
@@ -186,7 +223,7 @@ class AvgStatsCallback(CallBacks):
 
     def after_epoch(self):
         stats = ["{}/{}".format(self.epoch+1, self.epochs)]
-        for o in [self.train_stats,  self.valid_stats]:
+        for o in [self.train_stats ,self.valid_stats]:
             stats += [f'{v:.6f}' for v in o.avg_stats]
         
         t = self.valid_start_time if self.train_start_time is None else self.train_start_time 

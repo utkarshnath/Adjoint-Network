@@ -25,7 +25,6 @@ act_func = nn.ReLU()
 
 first = True
 def conv(ni, no, ks, s=1, bias=False,mask_layer=False):
-    return nn.Conv2d(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)
     if no>64:
        mask_layer = True
     else:
@@ -34,7 +33,7 @@ def conv(ni, no, ks, s=1, bias=False,mask_layer=False):
     if first:
         first = False
         return conv2dFirstLayer(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer)
-        
+
     return conv2dFaster(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer)
 
 '''
@@ -58,14 +57,14 @@ class ResBlock(nn.Module):
         #print('Res ni ',ni,'no ',no)
         ni *= expansion
         layers = [conv_layer(ni, no, 3, s),
-                  conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False) 
+                  conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False)
         ] if expansion == 1 else [
             conv_layer(ni, no, 1, 1),
             conv_layer(no, no, 3, s),
             conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False)
         ]
         self.convs = nn.Sequential(*layers)
-        self.idconv = noop if ni == no*expansion else conv_layer(ni, no*expansion, 1, 1, act=False)  
+        self.idconv = noop if ni == no*expansion else conv_layer(ni, no*expansion, 1, 1, act=False)
         self.pool = noop if s == 1 else nn.AvgPool2d(2,ceil_mode=True)
 
 
@@ -79,31 +78,29 @@ class XResNet(nn.Sequential):
     @classmethod
     def create(cls, expansion,  layers, c_in=3, c_out=10):
         nbs = [c_in, 16,64,64]
-        stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False) 
-                for i in range(2)] 
+        stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False)
+                for i in range(2)]
 
         maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         nbs = [64//expansion, 64, 128, 256, 512]
         res_layers = [cls._make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l)
             for i,l in enumerate(layers) ]
-        
+
         layers = [Lambda(imagenet_resize), *stem, maxpool, *res_layers]
-        layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), nn.Linear(nbs[-1]*expansion, c_out) ])
-        
-        resnet = cls(*layers)        
+        layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), linear(nbs[-1]*expansion, c_out) ])
+
+        resnet = cls(*layers)
         #init_cnn(resnet)        
         return resnet
 
     @staticmethod
     def _make_layer(ni, no, expansion, s, number_block):
-        return nn.Sequential(*[ResBlock(ni if i==0 else no, no, expansion, s=s if i==0 else 1) 
+        return nn.Sequential(*[ResBlock(ni if i==0 else no, no, expansion, s=s if i==0 else 1)
             for i in range(number_block)] )
 
 
-def xresnet18 (mask=1,**kwargs):
-    global randommask 
+def xresnet_fast18 (mask=1,**kwargs):
+    global randommask
     randommask = mask
     return XResNet.create(1, [2, 2,  2, 2], **kwargs)
-
-

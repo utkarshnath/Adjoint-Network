@@ -33,6 +33,7 @@ class convolutionFunction(Function):
         out = out.view(N,out_channels,output_size,output_size)
         out = out[:,:,:,:] + bias[None,:,None,None]
         context.save_for_backward(input,weight,bias,unfolded_input)
+        end = time.time()
         return out
      
     @staticmethod
