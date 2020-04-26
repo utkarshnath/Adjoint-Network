@@ -2,17 +2,17 @@ from helper import get_data_bunch,load_data,load_cifar_data
 from run import Runner, Learn
 from IPython.core.debugger import set_trace
 from torch import tensor, nn, optim
-from callback import LR_find,Recorder,AvgStatsCallback,CudaCallback,GradientPrintCallback,ParamScheduler,SaveModelCallback
+from callback import *
 import torch
 import torch.nn.functional as F
 from mask import randomShape,swastik,star,circle,oval,firstLayerMasking,secondLayerMasking,thirdLayerMasking
 from torch.nn.parameter import Parameter
 # from .. import init
 from torch.autograd import gradcheck
-from schedulers import combine_schedules, sched_cos
+from schedulers import combine_schedules, sched_cos, sched_lin
 from myconv import myconv2d
-from model import xresnet18
-from modelFaster import xresnet_fast18
+from model import xresnet18,xresnet34,xresnet50
+from modelFaster import xresnet_fast18,xresnet_fast34,xresnet_fast50
 import time
 from convFaster import *
 
@@ -113,37 +113,46 @@ if __name__ == "__main__":
    batch_size = 32
    image_size = 32
    c = 100
+   train = False
+   lr_finder = False
+   is_individual_training = False 
    #data = get_data_bunch(batch_size)
-   data = load_cifar_data(batch_size, image_size,100)
-   #loss_func = MyCrossEntropy(1)
-   loss_func = F.cross_entropy
+   data = load_cifar_data(batch_size, image_size,c)
    
+   lr = 0.1
+   lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e4)])
+   lr_scheduler = ParamScheduler('lr', lr_sched)
+   cbfs = [lr_scheduler,CudaCallback()]
+
+   if is_individual_training:
+      epoch = 150
+      compression_factor = 8
+      loss_func = F.cross_entropy
+      cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      model = xresnet50(c_out=c,compression_factor=compression_factor)
+   else:
+      # currently need to set compression rate manually in convFaster.py
+      epoch = 200
+      loss_func = MyCrossEntropy(1)
+      cbfs+=[AvgStatsCallback()]
+      model = xresnet_fast50(c_out=c)
+      #model = load_model(model, state_dict_file_path="/home/un270/experiments/mymodel/cifar100134.pt")
+
+   #cbfs+=[SaveModelCallback("cifar100_20_1")] 
    #loss_func = MyCrossEntropyFaster(1)
    #model_big = xresnet18(c_out=c)
    #model_big = load_model(model_big, state_dict_file_path="mymodel/cifar100134.pt")
 
-   lr_finder = False
-   model = xresnet18(c_out=c)
    end = time.time()
    print("Loaded model", end-start)
-   lr = 0.1
-   lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e4)])
-   lr_scheduler = ParamScheduler('lr', lr_sched)
 
    opt = optim.SGD(model.parameters(),lr)
    learn = Learn(model,opt,loss_func, data)
-   cbfs = [lr_scheduler,CudaCallback(),AvgStatsCallback()] #cuda
    if lr_finder:
       cbfs = [CudaCallback(),LR_find(max_iters=89),Recorder()]
 
    run = Runner(learn,cbs = cbfs)
-   run.fit(150)
-   #print(model[1].weight)
-   #print()
-   #print(model[3].weight)
-   #print()
-   #print(model[5].weight)
-   #print(model.layer[2].weight)
+   run.fit(epoch)
 
 if lr_finder:
    print(cbfs[-1].lrs)

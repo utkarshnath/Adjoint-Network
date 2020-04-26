@@ -45,8 +45,10 @@ def init_cnn(m):
 
 def conv_layer(ni, no, ks, s, zero_bn=False, act=True,mask_layer=True):
     #print('conv ','ni ',ni,'no ',no,ks,s)
-    bn = nn.BatchNorm2d(no)
-    nn.init.constant_(bn.weight, 0. if zero_bn else 1.)
+    bn = batchNorm(no)
+    #bn = nn.BatchNorm2d(no)
+    nn.init.constant_(bn.bn1.weight, 0. if zero_bn else 1.)
+    nn.init.constant_(bn.bn2.weight, 0. if zero_bn else 1.)
     layers = [conv(ni, no, ks=ks, s=s,mask_layer=mask_layer), bn]
     if act: layers += [act_func]
     return nn.Sequential(*layers)
@@ -76,7 +78,7 @@ class ResBlock(nn.Module):
 class XResNet(nn.Sequential):
 
     @classmethod
-    def create(cls, expansion,  layers, c_in=3, c_out=10):
+    def create(cls, expansion,  layers, c_in=3, c_out=10, resize=cifar_resize):
         nbs = [c_in, 16,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False)
                 for i in range(2)]
@@ -87,7 +89,7 @@ class XResNet(nn.Sequential):
         res_layers = [cls._make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l)
             for i,l in enumerate(layers) ]
 
-        layers = [Lambda(imagenet_resize), *stem, maxpool, *res_layers]
+        layers = [Lambda(resize), *stem, maxpool, *res_layers]
         layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), linear(nbs[-1]*expansion, c_out) ])
 
         resnet = cls(*layers)
@@ -104,3 +106,8 @@ def xresnet_fast18 (mask=1,**kwargs):
     global randommask
     randommask = mask
     return XResNet.create(1, [2, 2,  2, 2], **kwargs)
+
+def xresnet_fast34 (**kwargs): return XResNet.create(1, [3, 4,  6, 3], **kwargs)
+def xresnet_fast50 (**kwargs): return XResNet.create(4, [3, 4,  6, 3], **kwargs)
+def xresnet_fast101(**kwargs): return XResNet.create(4, [3, 4, 23, 3], **kwargs)
+def resnet_fast152(**kwargs): return XResNet.create(4, [3, 8, 36, 3], **kwargs)

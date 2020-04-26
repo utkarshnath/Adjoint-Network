@@ -128,7 +128,7 @@ class Data():
     @property
     def train_path(self): return self.path/'train'
     @property
-    def valid_path(self): return '/scratch/un270/val1'
+    def valid_path(self): return self.path/'val'
 
 
     #@property

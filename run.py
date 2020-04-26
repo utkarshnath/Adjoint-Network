@@ -1,4 +1,5 @@
 import torch
+import time
 
 class DataBunch():
     def __init__(self, train_dl, valid_dl):
@@ -81,6 +82,7 @@ class Runner():
         except CancelBatchException: self.handle("after_cancel_batch")
         finally:  
             self.handle("after_batch")
+            #print()
 
 
     def all_batches(self, dataloader):
@@ -94,24 +96,35 @@ class Runner():
         except CancelEpochException: self.handle("after_cancel_epoch")
     
      
-    def fit(self, epochs, start_epoch=0):
+    def fit(self, epochs,train=True,start_epoch=0):
         self.epochs = epochs 
         self.start_epoch = start_epoch
         try:
-            self.handle("begin_fit")        
-            for epoch in range(start_epoch, epochs):
-                self.epoch = epoch
-                self.learn.model.train()
-                self.in_train = True
+            if train:
+               self.handle("begin_fit")        
+               for epoch in range(start_epoch, epochs):
+                   self.epoch = epoch
+                   self.learn.model.train()
+                   self.in_train = True
                 
-                self.all_batches(self.learn.data.train_dl) 
+                   self.all_batches(self.learn.data.train_dl) 
                 
-                self.learn.model.eval()
-                self.in_train = False            
-                with torch.no_grad():        
-                    self.all_batches(self.learn.data.valid_dl)
+                   self.learn.model.eval()
+                   self.in_train = False            
+                   with torch.no_grad():        
+                       self.all_batches(self.learn.data.valid_dl)
        
-                self.handle("after_epoch")
+                   self.handle("after_epoch")
+            else:
+                self.learn.model.eval()
+                self.in_train = False
+                with torch.no_grad():
+                    self.epoch = 1
+                    start = time.time() 
+                    self.all_batches(self.learn.data.train_dl)
+                    end = time.time()
+                    print(end-start)
+                    self.handle("after_epoch")
 
         except CancelTrainException: self.handle("after_cancel_train")
         finally:

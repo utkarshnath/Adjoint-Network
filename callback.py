@@ -12,47 +12,42 @@ class CallBacks():
     def __getattr__(self, k): 
         return getattr(self.run, k, None)
 
+
 def accuracy(out, yb):
     l,_ = out.shape
-    return (torch.argmax(out[:l], dim=1)==yb).float().mean()
-def accuracy1(out, yb):
-    l,_ = out.shape
-    return (torch.argmax(out[l//2:], dim=1)==yb).float().mean()
-def accuracy2(out, yb):
-    l,_ = out.shape
-    return (torch.argmax(out[l//2:3*l//4], dim=1)==yb).float().mean()
-def accuracy3(out, yb):
-    l,_ = out.shape
-    return (torch.argmax(out[3*l//4:], dim=1)==yb).float().mean()    
+    return (torch.argmax(out, dim=1)==yb).float().mean()
 
 def top_k_accuracy(out, yb, k=5):
     l,_ = out.shape
-    idx = out[:l].topk(k=k, dim=1)[1]
+    idx = out.topk(k=k, dim=1)[1]
     yb = yb.unsqueeze(dim=1).expand_as(idx)
     return (yb == idx).max(dim=1)[0].float().mean()
 
-def top_k_accuracy1(out, yb, k=5):
+
+def accuracy_faster(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[:l//2], dim=1)==yb).float().mean()
+def accuracy1_faster(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[l//2:], dim=1)==yb).float().mean()
+
+def top_k_accuracy_faster(out, yb, k=5):
+    l,_ = out.shape
+    idx = out[:l//2].topk(k=k, dim=1)[1]
+    yb = yb.unsqueeze(dim=1).expand_as(idx)
+    return (yb == idx).max(dim=1)[0].float().mean()
+
+def top_k_accuracy1_faster(out, yb, k=5):
     l,_ = out.shape
     idx = out[l//2:].topk(k=k, dim=1)[1]
-    yb = yb.unsqueeze(dim=1).expand_as(idx)
-    return (yb == idx).max(dim=1)[0].float().mean()
-
-def top_k_accuracy2(out, yb, k=5):
-    l,_ = out.shape
-    idx = out[l//2:3*l//4].topk(k=k, dim=1)[1]
-    yb = yb.unsqueeze(dim=1).expand_as(idx)
-    return (yb == idx).max(dim=1)[0].float().mean()
-
-def top_k_accuracy3(out, yb, k=5):
-    l,_ = out.shape
-    idx = out[3*l//4:].topk(k=k, dim=1)[1]
     yb = yb.unsqueeze(dim=1).expand_as(idx)
     return (yb == idx).max(dim=1)[0].float().mean()
 
 
 class CudaCallback(CallBacks):
     def begin_fit(self):
-        self.model.cuda()
+        #self.model.cuda()
+        self.model = torch.nn.DataParallel(self.model).cuda()
         #self.model_big.cuda()
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
@@ -193,15 +188,15 @@ class SaveModelCallback(CallBacks):
         self.model_directory = model_directory
 
     def after_epoch(self):
-        if self.epoch>50:
-           curr_name = os.path.join(self.model_directory, self.name + str(self.epoch)+".pt")
+        if self.epoch>0:
+           curr_name = os.path.join(self.model_directory, self.name +".pt")
            torch.save(self.learn.model.state_dict(), curr_name) 
 
 # should probably run at the end of other call backs
 class AvgStatsCallback(CallBacks):
     _order = 50
    
-    def __init__(self, metrics=[accuracy,top_k_accuracy]):
+    def __init__(self, metrics=[accuracy_faster,top_k_accuracy_faster,accuracy1_faster,top_k_accuracy1_faster]):
         self.train_stats = Stats(metrics, True)
         self.valid_stats = Stats(metrics, False)    
         self.train_start_time, self.valid_start_time = None, None
