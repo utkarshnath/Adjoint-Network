@@ -16,10 +16,10 @@ def test_near(a,b): test(a,b,near)
 class conv2dFirstLayer(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,mask=1,parts=4,*kargs,**kwargs):
         super(conv2dFirstLayer, self).__init__(in_channels,out_channels,kernel_size,padding,stride,mask,*kargs, **kwargs)
-        self.mask = torch.ones(parts,out_channels,in_channels,kernel_size,kernel_size).cuda()
-        for i in range(1,parts):
-            start = out_channels - i*out_channels//parts
-            self.mask[i,start:out_channels] = 0
+        #self.mask = torch.ones(parts,out_channels,in_channels,kernel_size,kernel_size).cuda()
+        #for i in range(1,parts):
+        #    start = out_channels - i*out_channels//parts
+        #    self.mask[i,start:out_channels] = 0
         self.padding = (padding,padding)
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
@@ -29,29 +29,35 @@ class conv2dFirstLayer(nn.Conv2d):
 
     def forward(self,input):
         # print(self.mask[0].sum(),self.mask[1].sum(),self.mask[2].sum(),self.mask[3].sum())
-        a = F.conv2d(input,self.weight * self.mask[0],self.bias,self.stride,self.padding,self.dilation, self.groups)
+        a = F.conv2d(input,self.weight,self.bias,self.stride,self.padding,self.dilation, self.groups)
         #b = F.conv2d(input,self.weight * self.mask[1],self.bias,self.stride,self.padding,self.dilation, self.groups)
         #c = F.conv2d(input,self.weight * self.mask[2],self.bias,self.stride,self.padding,self.dilation, self.groups)
-        if self.mask_layer:
-           print("Something wrong")
-           d = F.conv2d(input,self.weight * self.mask[3],self.bias,self.stride,self.padding,self.dilation, self.groups)
-        else:
-           d = F.conv2d(input,self.weight * self.mask[0],self.bias,self.stride,self.padding,self.dilation, self.groups)
-        concatinatedTensor = torch.cat([a, d], dim=0)
+        
+        #if self.mask_layer:
+        #   print("Something wrong")
+        #   #d = F.conv2d(input,self.weight * self.mask[3],self.bias,self.stride,self.padding,self.dilation, self.groups)
+        #else:
+        #   d = F.conv2d(input,self.weight,self.bias,self.stride,self.padding,self.dilation, self.groups)
+        concatinatedTensor = torch.cat([a, a], dim=0)
         return concatinatedTensor
 
 class conv2dFaster(nn.Conv2d):
-    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,mask=1,parts=4,*kargs,**kwargs):
+    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,mask=1,*kargs,**kwargs):
         super(conv2dFaster, self).__init__(in_channels,out_channels,kernel_size,padding,stride,mask,*kargs, **kwargs)
-        parts = 8
-        self.mask = torch.ones(parts,out_channels,in_channels,kernel_size,kernel_size).cuda()
-        self.parts = parts
-        for i in range(1,parts):
-            start = out_channels - i*out_channels//parts
-            self.mask[i,start:out_channels] = 0
+        #parts = 4
+        #self.mask = torch.ones(parts,out_channels,in_channels,kernel_size,kernel_size).cuda()
+        #self.parts = parts
+        #for i in range(1,parts):
+        #    start = out_channels - i*out_channels//parts
+        #    self.mask[i,start:out_channels] = 0
         self.padding = (padding,padding)
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
+        self.out_channels = out_channels
+        self.compression_factor = 8
+        self.mask = 0
+        #self.mask[out_channels//self.compression_factor:] = 0
+        self.isFirst = True 
         #if mask_layer:
         #   x = out_channels//32
         #   start = out_channels//x
@@ -59,13 +65,28 @@ class conv2dFaster(nn.Conv2d):
 
     def forward(self,input):
         l,_,_,_ = input.shape
-        a = F.conv2d(input[:l//2],self.weight * self.mask[0],self.bias,self.stride,self.padding)
+        out = F.conv2d(input,self.weight,self.bias,self.stride,self.padding)
+        if(self.isFirst):
+           self.isFirst = False
+           self.mask = torch.ones(out.shape).cuda()
+           self.mask[l//2:,self.out_channels//self.compression_factor:] = 0
         if self.mask_layer:
-           d = F.conv2d(input[l//2:],self.weight * self.mask[self.parts-1],self.bias,self.stride,self.padding) 
-        else:
-           d = F.conv2d(input[l//2:],self.weight * self.mask[0],self.bias,self.stride,self.padding)
-        concatinatedTensor = torch.cat([a, d], dim=0)
-        return concatinatedTensor
+           if out.shape[0]!=self.mask.shape[0]:
+              out[l//2:,self.out_channels//self.compression_factor:] = 0
+           else:
+               out*=self.mask
+        
+        return out
+        
+        #a = F.conv2d(input[:l//2],self.weight * self.mask[0],self.bias,self.stride,self.padding)
+        #if self.mask_layer:
+        #   d = F.conv2d(input[l//2:],self.weight * self.mask[self.parts-1],self.bias,self.stride,self.padding) 
+        #else:
+        #   d = F.conv2d(input[l//2:],self.weight * self.mask[0],self.bias,self.stride,self.padding)
+        #concatinatedTensor = torch.cat([a, d], dim=0)
+        #if concatinatedTensor.shape[0]==32:
+        #   print("32")
+        #return concatinatedTensor
 
 class myconv2dFaster(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,conpression_factor=4,*kargs,**kwargs):

@@ -115,7 +115,7 @@ if __name__ == "__main__":
    c = 100
    train = False
    lr_finder = False
-   is_individual_training = False 
+   is_individual_training = False
    #data = get_data_bunch(batch_size)
    data = load_cifar_data(batch_size, image_size,c)
    
@@ -126,16 +126,16 @@ if __name__ == "__main__":
 
    if is_individual_training:
       epoch = 150
-      compression_factor = 8
+      compression_factor = 1
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
-      model = xresnet50(c_out=c,compression_factor=compression_factor)
+      model = xresnet18(c_out=c,compression_factor=compression_factor)
    else:
       # currently need to set compression rate manually in convFaster.py
       epoch = 200
       loss_func = MyCrossEntropy(1)
       cbfs+=[AvgStatsCallback()]
-      model = xresnet_fast50(c_out=c)
+      model = xresnet_fast18(c_out=c)
       #model = load_model(model, state_dict_file_path="/home/un270/experiments/mymodel/cifar100134.pt")
 
    #cbfs+=[SaveModelCallback("cifar100_20_1")] 
