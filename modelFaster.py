@@ -25,10 +25,18 @@ act_func = nn.ReLU()
 
 first = True
 def conv(ni, no, ks, s=1, bias=False,mask_layer=False):
-    if no>64:
+    # For resnet 18
+    #if no>64:
+    #   mask_layer = True
+    #else:
+    #   mask_layer = False
+
+    # For resnet 50
+    if ni>64 and no>64:
        mask_layer = True
     else:
        mask_layer = False
+
     global first
     if first:
         first = False

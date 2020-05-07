@@ -23,21 +23,10 @@ class conv2dFirstLayer(nn.Conv2d):
         self.padding = (padding,padding)
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
-        #x = out_channels//64
-        #start = out_channels//x
-        #self.mask[3,start:] = 0
 
     def forward(self,input):
         # print(self.mask[0].sum(),self.mask[1].sum(),self.mask[2].sum(),self.mask[3].sum())
         a = F.conv2d(input,self.weight,self.bias,self.stride,self.padding,self.dilation, self.groups)
-        #b = F.conv2d(input,self.weight * self.mask[1],self.bias,self.stride,self.padding,self.dilation, self.groups)
-        #c = F.conv2d(input,self.weight * self.mask[2],self.bias,self.stride,self.padding,self.dilation, self.groups)
-        
-        #if self.mask_layer:
-        #   print("Something wrong")
-        #   #d = F.conv2d(input,self.weight * self.mask[3],self.bias,self.stride,self.padding,self.dilation, self.groups)
-        #else:
-        #   d = F.conv2d(input,self.weight,self.bias,self.stride,self.padding,self.dilation, self.groups)
         concatinatedTensor = torch.cat([a, a], dim=0)
         return concatinatedTensor
 
@@ -54,14 +43,10 @@ class conv2dFaster(nn.Conv2d):
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
         self.out_channels = out_channels
-        self.compression_factor = 8
+        self.compression_factor = 16
         self.mask = 0
         #self.mask[out_channels//self.compression_factor:] = 0
         self.isFirst = True 
-        #if mask_layer:
-        #   x = out_channels//32
-        #   start = out_channels//x
-        #   self.mask[3,start:out_channels] = 0
 
     def forward(self,input):
         l,_,_,_ = input.shape
@@ -78,15 +63,6 @@ class conv2dFaster(nn.Conv2d):
         
         return out
         
-        #a = F.conv2d(input[:l//2],self.weight * self.mask[0],self.bias,self.stride,self.padding)
-        #if self.mask_layer:
-        #   d = F.conv2d(input[l//2:],self.weight * self.mask[self.parts-1],self.bias,self.stride,self.padding) 
-        #else:
-        #   d = F.conv2d(input[l//2:],self.weight * self.mask[0],self.bias,self.stride,self.padding)
-        #concatinatedTensor = torch.cat([a, d], dim=0)
-        #if concatinatedTensor.shape[0]==32:
-        #   print("32")
-        #return concatinatedTensor
 
 class myconv2dFaster(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,conpression_factor=4,*kargs,**kwargs):
@@ -151,27 +127,14 @@ class MyCrossEntropy(nn.Module):
     def forward(self, output, target):
         l,_ = output.shape
         log_preds1 = F.log_softmax(output[:l//2], dim=-1)
-        
         nll1 = F.nll_loss(log_preds1, target)
-  
+        
+        # log_preds2 = F.log_softmax(output[l//2:], dim=-1)
+        # nll2 = F.nll_loss(log_preds2, target)
+
         prob1 = F.softmax(output[:l//2], dim=-1)
         prob2 = F.softmax(output[l//2:], dim=-1)
         kl = (prob1 * torch.log(prob1/(prob2+1e-6))).sum(1)
 
         return nll1 + kl.mean()
 
-class MyCrossEntropyFaster(nn.Module):
-    def __init__(self,alpha=1):
-        super().__init__()
-        self.alpha = alpha
-
-    def forward(self, output,output_big, target):
-        l,_ = output.shape
-        #print(output.shape,output_big.shape,target.shape)
-        log_preds1 = F.log_softmax(output, dim=-1)
-        log_preds2 = F.log_softmax(output_big, dim=-1)
-        nll1 = F.nll_loss(log_preds1, target)
-        nll2 = F.nll_loss(log_preds2, target)
-        #return nll1 + self.alpha *(abs(output - output_big)).mean()
-        #return nll1 + self.alpha * ((nll1-nll2)**2).mean()
-        return nll1 + self.alpha * (abs(nll1-nll2))

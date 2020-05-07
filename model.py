@@ -110,6 +110,6 @@ def xresnet18 (mask=1,**kwargs):
 def xresnet34 (**kwargs): return XResNet.create(1, [3, 4,  6, 3], **kwargs)
 def xresnet50 (**kwargs): return XResNet.create(4, [3, 4,  6, 3], **kwargs)
 def xresnet101(**kwargs): return XResNet.create(4, [3, 4, 23, 3], **kwargs)
-def resnet152(**kwargs): return XResNet.create(4, [3, 8, 36, 3], **kwargs)
+def xresnet152(**kwargs): return XResNet.create(4, [3, 8, 36, 3], **kwargs)
 
 

@@ -1,8 +1,11 @@
 import time, datetime
 import torch
+import torch.nn.functional as F
+import torch.nn as nn
 import os
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
+from parallel import DataParallelModel, DataParallelCriterion
 
 class CallBacks():
     _order = 0
@@ -43,12 +46,22 @@ def top_k_accuracy1_faster(out, yb, k=5):
     yb = yb.unsqueeze(dim=1).expand_as(idx)
     return (yb == idx).max(dim=1)[0].float().mean()
 
+def nll(out, yb):
+    l,_ = out.shape
+    log_preds = F.log_softmax(out[:l//2], dim=-1)
+    nll1 = F.nll_loss(log_preds, yb)
+    return nll1
 
 class CudaCallback(CallBacks):
+    #def __init__(self,device):
+        #self.device = device
+
     def begin_fit(self):
-        #self.model.cuda()
-        self.model = torch.nn.DataParallel(self.model).cuda()
-        #self.model_big.cuda()
+        #print(torch.cuda.current_device())
+        self.model.cuda()
+        #self.model = nn.DataParallel(self.model)
+        #self.model = self.model.to(self.device)
+    
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
 class GradientPrintCallback(CallBacks):
@@ -106,7 +119,30 @@ class ParamScheduler(CallBacks):
     def begin_batch(self): 
         if self.in_train: self.set_param()
 
+'''
+class ParamScheduler(CallBacks):
+    _order = 5
+    
+    def __init__(self, pname, sched_func, using_torch_optim=False):
+        self.pname = pname
+        self.sched_func = sched_func 
+        self.iter = 0.0
+        self.using_torch_optim = using_torch_optim
 
+    def set_param(self):
+        self.iter += 1.0/self.iters
+
+        hypers = self.opt.param_groups       
+        if not self.using_torch_optim:
+            hypers = self.opt.hypers 
+       
+        for h in hypers:
+            h[self.pname] = self.sched_func((self.iter+self.start_epoch)/self.epochs)
+   
+    def begin_batch(self): 
+        if self.in_train: self.set_param()
+
+'''
 # probably run after cuda 
 class LR_find(CallBacks):
     _order = 1
@@ -181,7 +217,7 @@ class Recorder(CallBacks):
 
 class SaveModelCallback(CallBacks):
     def __init__(self,name,save_dir="/scratch/un270/"):
-        model_directory = os.path.join(save_dir, "models")
+        model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):
             os.mkdir(model_directory)   
@@ -189,14 +225,14 @@ class SaveModelCallback(CallBacks):
 
     def after_epoch(self):
         if self.epoch>0:
-           curr_name = os.path.join(self.model_directory, self.name +".pt")
+           curr_name = os.path.join(self.model_directory, str(self.epoch) + ".pt")
            torch.save(self.learn.model.state_dict(), curr_name) 
 
 # should probably run at the end of other call backs
 class AvgStatsCallback(CallBacks):
     _order = 50
    
-    def __init__(self, metrics=[accuracy_faster,top_k_accuracy_faster,accuracy1_faster,top_k_accuracy1_faster]):
+    def __init__(self, metrics=[nll,accuracy_faster,top_k_accuracy_faster,accuracy1_faster,top_k_accuracy1_faster]):
         self.train_stats = Stats(metrics, True)
         self.valid_stats = Stats(metrics, False)    
         self.train_start_time, self.valid_start_time = None, None
@@ -225,4 +261,74 @@ class AvgStatsCallback(CallBacks):
         stats += [str(datetime.timedelta(seconds=int(time.time()-t))) ]
         self.logger(stats)
 
+class OpTime():
+    def __init__(self): self.reset() 
+    def reset(self): self.start = time.time()    
+    def compute_elasped_time(self): return time.time() - self.start
+
+# times the different operations.
+# should run before everything else
+class DebugTimeCallback(CallBacks):
+    _order = -1
+    
+    def __init__(self, print_freq=50, max_iters=100):
+        self.print_freq = print_freq
+        self.max_iters = max_iters 
+        self.reset_times()
+
+    def print_times(self):
+        times = [self.data_loading_time, self.model_compute_time, self.loss_compute_time, self.backward_compute_time, self.opt_step_time]
+        avg_t = [t/self.curr_counter for t in times]
+        print(avg_t)
+        print(sum(times)/self.curr_counter)        
+
+    def reset_times(self):
+        self.data_loading_time, self.model_compute_time = 0, 0
+        self.loss_compute_time, self.backward_compute_time = 0, 0
+        self.opt_step_time = 0
+        self.curr_counter = 0
+
+    def compute_elasped_time_and_reset(self, fr_time, crr_time):
+        ret_time = 0
+        if fr_time is not None: 
+            ret_time = fr_time.compute_elasped_time()
+        if crr_time is None: crr_time = OpTime()
+        else: crr_time.reset()
+
+        return ret_time, crr_time
+
+    def begin_batch(self):
+        ret_time, crr_time = self.compute_elasped_time_and_reset(self.after_batch_time, self.begin_batch_time)
+        self.data_loading_time += ret_time
+        self.begin_batch_time = crr_time
+
+    def after_pred(self):
+        ret_time, crr_time = self.compute_elasped_time_and_reset(self.begin_batch_time, self.after_pred_time)
+        self.model_compute_time += ret_time
+        self.after_pred_time = crr_time
+
+    def after_loss(self):
+        ret_time, crr_time = self.compute_elasped_time_and_reset(self.after_pred_time, self.after_loss_time)
+        self.loss_compute_time += ret_time
+        self.after_loss_time = crr_time
+
+    def before_step(self):
+        ret_time, crr_time = self.compute_elasped_time_and_reset(self.after_loss_time, self.before_step_time)
+        self.backward_compute_time += ret_time
+        self.before_step_time = crr_time
+
+    def before_zero_grad(self):
+        ret_time, crr_time = self.compute_elasped_time_and_reset(self.before_step_time, self.before_zero_grad_time)
+        self.opt_step_time += ret_time
+        self.before_zero_grad_time = crr_time
+
+    def after_batch(self):
+        self.after_batch_time = OpTime()
+        self.curr_counter += 1
+
+        if self.iter % self.print_freq == 0:
+            self.print_times()
+            self.reset_times()
+        
+        if self.iter >= self.max_iters: raise CancelTrainException()
 

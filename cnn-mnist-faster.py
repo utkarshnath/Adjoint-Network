@@ -11,10 +11,12 @@ from torch.nn.parameter import Parameter
 from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos, sched_lin
 from myconv import myconv2d
-from model import xresnet18,xresnet34,xresnet50
+from model import xresnet18,xresnet34,xresnet50,xresnet152
 from modelFaster import xresnet_fast18,xresnet_fast34,xresnet_fast50
 import time
 from convFaster import *
+from optimizers import *
+#from parallel import DataParallelModel, DataParallelCriterion
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -101,16 +103,22 @@ def conv6(data):
     )
 
 
+
+
 def load_model(model, state_dict_file_path=None):
     if state_dict_file_path is not None:
         model.load_state_dict(torch.load(state_dict_file_path))
     return model
 
+
 if __name__ == "__main__":
    start = time.time()
-   device = torch.device('cuda',0)
-   torch.cuda.set_device(device)
-   batch_size = 32
+   #device = torch.device('cuda')
+   #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+   #torch.cuda.set_device(device)
+   device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+   batch_size = 64
    image_size = 32
    c = 100
    train = False
@@ -119,34 +127,40 @@ if __name__ == "__main__":
    #data = get_data_bunch(batch_size)
    data = load_cifar_data(batch_size, image_size,c)
    
-   lr = 0.1
-   lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e4)])
+   #lr = 0.1
+   #lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e4)])
+   #lr_scheduler = ParamScheduler('lr', lr_sched)
+   #cbfs = [lr_scheduler,CudaCallback()]
+   
+
+   lr = 8e-4
+   lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
+   beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
    lr_scheduler = ParamScheduler('lr', lr_sched)
-   cbfs = [lr_scheduler,CudaCallback()]
+   beta1_scheduler = ParamScheduler('beta1', beta1_sched)
+   cbfs = [lr_scheduler,beta1_scheduler,CudaCallback()]
 
    if is_individual_training:
       epoch = 150
       compression_factor = 1
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
-      model = xresnet18(c_out=c,compression_factor=compression_factor)
+      model = xresnet50(c_out=c,compression_factor=compression_factor)
    else:
       # currently need to set compression rate manually in convFaster.py
       epoch = 200
       loss_func = MyCrossEntropy(1)
       cbfs+=[AvgStatsCallback()]
-      model = xresnet_fast18(c_out=c)
+      model = xresnet_fast50(c_out=c)
       #model = load_model(model, state_dict_file_path="/home/un270/experiments/mymodel/cifar100134.pt")
-
-   #cbfs+=[SaveModelCallback("cifar100_20_1")] 
-   #loss_func = MyCrossEntropyFaster(1)
-   #model_big = xresnet18(c_out=c)
-   #model_big = load_model(model_big, state_dict_file_path="mymodel/cifar100134.pt")
+   
 
    end = time.time()
    print("Loaded model", end-start)
 
-   opt = optim.SGD(model.parameters(),lr)
+   #opt = optim.SGD(model.parameters(),lr)
+   opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],
+        stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
    learn = Learn(model,opt,loss_func, data)
    if lr_finder:
       cbfs = [CudaCallback(),LR_find(max_iters=89),Recorder()]
