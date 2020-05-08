@@ -101,6 +101,7 @@ class Stats():
             self.tol_metrics[i] += batch_size * metric(run.pred, run.yb)
         self.count += batch_size
 
+'''
 # should run after cuda but before everything else
 class ParamScheduler(CallBacks):
     _order = 5
@@ -134,6 +135,7 @@ class ParamScheduler(CallBacks):
 
         hypers = self.opt.param_groups       
         if not self.using_torch_optim:
+            print("Trying adam")
             hypers = self.opt.hypers 
        
         for h in hypers:
@@ -142,7 +144,7 @@ class ParamScheduler(CallBacks):
     def begin_batch(self): 
         if self.in_train: self.set_param()
 
-'''
+
 # probably run after cuda 
 class LR_find(CallBacks):
     _order = 1
