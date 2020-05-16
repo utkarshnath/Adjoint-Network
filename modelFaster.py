@@ -5,6 +5,7 @@ from mask import *
 from convFaster import *
 
 randommask = 1
+device = None
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -83,6 +84,57 @@ class ResBlock(nn.Module):
         #print(self.idconv(self.pool(x)).shape)
         return act_func(self.convs(x) + self.idconv(self.pool(x)))
 
+def accuracy_faster(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[:l//2], dim=1)==yb).float().mean()
+def accuracy1_faster(out, yb):
+    l,_ = out.shape
+    return (torch.argmax(out[l//2:], dim=1)==yb).float().mean()
+
+def top_k_accuracy_faster(out, yb, k=5):
+    l,_ = out.shape
+    idx = out[:l//2].topk(k=k, dim=1)[1]
+    yb = yb.unsqueeze(dim=1).expand_as(idx)
+    return (yb == idx).max(dim=1)[0].float().mean()
+
+def top_k_accuracy1_faster(out, yb, k=5):
+    l,_ = out.shape
+    idx = out[l//2:].topk(k=k, dim=1)[1]
+    yb = yb.unsqueeze(dim=1).expand_as(idx)
+    return (yb == idx).max(dim=1)[0].float().mean()
+
+def nll(out, yb):
+    l,_ = out.shape
+    log_preds = F.log_softmax(out[:l//2], dim=-1)
+    nll1 = F.nll_loss(log_preds, yb)
+    return nll1
+
+class mySequential(nn.Sequential):
+    def forward(self, input,target):
+        for module in self._modules.values():
+            input = module(input)
+
+        output = input
+        l,_ = output.shape
+        log_preds1 = F.log_softmax(output[:l//2], dim=-1)
+        log_preds2 = F.log_softmax(output[l//2:], dim=-1)
+
+        nll1 = F.nll_loss(log_preds1, target)
+
+        prob1 = F.softmax(output[:l//2], dim=-1)
+        prob2 = F.softmax(output[l//2:], dim=-1)
+        kl = (prob1 * torch.log(1e-6+prob1/(prob2+1e-6))).sum(1)
+
+        global device
+        loss =  torch.tensor([nll1 + kl.mean()]).to(device)
+        print(loss)
+        top1_big = accuracy_faster(output,target)
+        top5_big = top_k_accuracy_faster(output,target)
+        top1_small = accuracy1_faster(output,target)
+        top5_small = top_k_accuracy1_faster(output,target)
+        
+        return loss,[nll(output,target),top1_big,top5_big,top1_small,top5_small]
+
 class XResNet(nn.Sequential):
 
     @classmethod
@@ -116,6 +168,9 @@ def xresnet_fast18 (mask=1,**kwargs):
     return XResNet.create(1, [2, 2,  2, 2], **kwargs)
 
 def xresnet_fast34 (**kwargs): return XResNet.create(1, [3, 4,  6, 3], **kwargs)
-def xresnet_fast50 (**kwargs): return XResNet.create(4, [3, 4,  6, 3], **kwargs)
+def xresnet_fast50 (device1,**kwargs):
+    global device
+    device = device1
+    return XResNet.create(4, [3, 4,  6, 3], **kwargs)
 def xresnet_fast101(**kwargs): return XResNet.create(4, [3, 4, 23, 3], **kwargs)
 def resnet_fast152(**kwargs): return XResNet.create(4, [3, 8, 36, 3], **kwargs)

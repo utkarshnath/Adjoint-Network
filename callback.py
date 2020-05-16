@@ -26,7 +26,6 @@ def top_k_accuracy(out, yb, k=5):
     yb = yb.unsqueeze(dim=1).expand_as(idx)
     return (yb == idx).max(dim=1)[0].float().mean()
 
-
 def accuracy_faster(out, yb):
     l,_ = out.shape
     return (torch.argmax(out[:l//2], dim=1)==yb).float().mean()
@@ -53,16 +52,17 @@ def nll(out, yb):
     return nll1
 
 class CudaCallback(CallBacks):
-    #def __init__(self,device):
-        #self.device = device
+    def __init__(self,device):
+        self.device = device
 
     def begin_fit(self):
+        #pass
         #print(torch.cuda.current_device())
         self.model.cuda()
         #self.model = nn.DataParallel(self.model)
         #self.model = self.model.to(self.device)
     
-    def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
+    def begin_batch(self): self.run.xb,self.run.yb = self.xb.to(self.device),self.yb.to(self.device)
 
 class GradientPrintCallback(CallBacks):
     def after_batch(self):
@@ -95,8 +95,8 @@ class Stats():
 
     def accumulate(self, run):
         batch_size = run.xb.shape[0]
-
-        self.tol_loss += batch_size * run.loss
+        
+        self.tol_loss += (batch_size) * run.loss
         for i, metric in enumerate(self.metrics):
             self.tol_metrics[i] += batch_size * metric(run.pred, run.yb)
         self.count += batch_size
@@ -135,7 +135,6 @@ class ParamScheduler(CallBacks):
 
         hypers = self.opt.param_groups       
         if not self.using_torch_optim:
-            print("Trying adam")
             hypers = self.opt.hypers 
        
         for h in hypers:

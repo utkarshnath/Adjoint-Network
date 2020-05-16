@@ -43,7 +43,7 @@ class conv2dFaster(nn.Conv2d):
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
         self.out_channels = out_channels
-        self.compression_factor = 16
+        self.compression_factor = 4
         self.mask = 0
         #self.mask[out_channels//self.compression_factor:] = 0
         self.isFirst = True 
@@ -51,15 +51,9 @@ class conv2dFaster(nn.Conv2d):
     def forward(self,input):
         l,_,_,_ = input.shape
         out = F.conv2d(input,self.weight,self.bias,self.stride,self.padding)
-        if(self.isFirst):
-           self.isFirst = False
-           self.mask = torch.ones(out.shape).cuda()
-           self.mask[l//2:,self.out_channels//self.compression_factor:] = 0
+        
         if self.mask_layer:
-           if out.shape[0]!=self.mask.shape[0]:
-              out[l//2:,self.out_channels//self.compression_factor:] = 0
-           else:
-               out*=self.mask
+           out[l//2:,self.out_channels//self.compression_factor:] = 0
         
         return out
         
@@ -126,15 +120,23 @@ class MyCrossEntropy(nn.Module):
 
     def forward(self, output, target):
         l,_ = output.shape
+        #first = torch.cat([output[:l//8], output[2*l//8:3*l//8],output[4*l//8:5*l//8],output[6*l//8:7*l//8]], dim=0)
+        #second = torch.cat([output[l//8:2*l//8], output[3*l//8:4*l//8],output[5*l//8:6*l//8],output[7*l//8:]], dim=0)
+        
         log_preds1 = F.log_softmax(output[:l//2], dim=-1)
         nll1 = F.nll_loss(log_preds1, target)
-        
-        # log_preds2 = F.log_softmax(output[l//2:], dim=-1)
-        # nll2 = F.nll_loss(log_preds2, target)
 
         prob1 = F.softmax(output[:l//2], dim=-1)
         prob2 = F.softmax(output[l//2:], dim=-1)
-        kl = (prob1 * torch.log(prob1/(prob2+1e-6))).sum(1)
 
-        return nll1 + kl.mean()
+        kl = (prob1 * torch.log(1e-6 + prob1/(prob2+1e-6))).sum(1)
 
+        return nll1 + self.alpha * kl.mean()
+
+class Identity(nn.Module):
+    def __init__(self,alpha=1):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, output, target):
+        return output[0]

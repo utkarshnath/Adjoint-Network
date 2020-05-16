@@ -9,7 +9,7 @@ from mask import randomShape,swastik,star,circle,oval,firstLayerMasking,secondLa
 from torch.nn.parameter import Parameter
 # from .. import init
 from torch.autograd import gradcheck
-from schedulers import combine_schedules, sched_cos
+from schedulers import combine_schedules, sched_cos,sched_no
 from myconv import myconv2d
 from model import xresnet18,xresnet50,xresnet101
 from modelFaster import xresnet_fast18,xresnet_fast50,xresnet_fast101 
@@ -22,57 +22,56 @@ def load_model(model, state_dict_file_path=None):
         model.load_state_dict(torch.load(state_dict_file_path))
     return model
 
-def imagenet_resize(x): return x.view(-1, 3, 224, 224)
+def imagenet_resize(x): return x.view(-1, 3, 128, 128)
 
 if __name__ == "__main__":
    start = time.time()
    device = torch.device('cuda',0)
-   torch.cuda.set_device(device)
+   #torch.cuda.set_device(device)
    #device = 'cuda' if torch.cuda.is_available() else 'cpu'
-   #n_gpu = torch.cuda.device_count()
-   batch_size = 32
-   image_size = 224
-   c = 1000
+   ngpu = torch.cuda.device_count()
+   batch_size = 512
+   image_size = 128
+   c = 10
    train = True
-   data = load_data(batch_size, image_size,0)
+   data = load_data(batch_size, image_size,2)
    lr_finder = False
    is_individual_training = True
    last_epoch_done_idx = None
    # Also change file name accordingly
-   is_sgd = True
+   is_sgd = False
 
    if is_sgd:
       print("SGD")
       lr = 0.8
-      lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
+      lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10,lr), sched_cos(lr, lr/1e5)])
       lr_scheduler = ParamScheduler('lr', lr_sched,using_torch_optim=True)
-      cbfs = [lr_scheduler,CudaCallback()]
+      cbfs = [lr_scheduler,CudaCallback(device)]
    else:
       print("adam")
-      lr = 1e-3
+      lr = (1e-2)
       lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
       beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
       lr_scheduler = ParamScheduler('lr', lr_sched)
       beta1_scheduler = ParamScheduler('beta1', beta1_sched)
-      cbfs = [lr_scheduler,beta1_scheduler,CudaCallback()]
+      cbfs = [lr_scheduler,beta1_scheduler,CudaCallback(device)]
  
    if is_individual_training:
-      epoch = 60
+      epoch = 100
       compression_factor = 1
       loss_func = F.cross_entropy
-      cbfs+=[SaveModelCallback("individual-18-original"),AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       model = xresnet18(c_out=c,resize=imagenet_resize,compression_factor=compression_factor)
    else:
       # currently need to set compression rate manually in convFaster.py
-      epoch = 80
-      loss_func = MyCrossEntropy(1)
-      cbfs+=[SaveModelCallback("combined-50-16"),AvgStatsCallback()]
-      #cbfs+=[AvgStatsCallback()]
-      model = xresnet_fast50(c_out=c,resize=imagenet_resize)
+      epoch = 100
+      loss_func = MyCrossEntropy()
+      cbfs+=[AvgStatsCallback()]
+      model = xresnet_fast50(device1=device,c_out=c,resize=imagenet_resize)
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/combined-50-4/{}.pt".format(last_epoch_done_idx)) 
 
-   #model = nn.DataParallel(model)
-   #model = model.to(device)
+   model = nn.DataParallel(model)
+   model = model.to(device)
 
    end = time.time()
    print("Loaded model", end-start)
@@ -82,7 +81,7 @@ if __name__ == "__main__":
    else:
       opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
   
-   learn = Learn(model,opt,loss_func, data)
+   learn = Learn(model,opt,loss_func, data,ngpu)
    
    if lr_finder:
       cbfs = [CudaCallback(),LR_find(),Recorder()]

@@ -16,15 +16,28 @@ class DataBunch():
 
 
 class Learn():
-    def __init__(self, model, opt, loss_func, data,model_big=None):
+    def __init__(self, model, opt, loss_func, data,ngpu):
         self.model, self.opt = model, opt 
         self.loss_func, self.data = loss_func, data
-        self.model_big = model_big
+        self.ngpu = ngpu
 
 
 class CancelTrainException(Exception): pass
 class CancelEpochException(Exception): pass
 class CancelBatchException(Exception): pass
+
+def updateSequenceOutput(output,ngpu=4):
+    l = output.shape[0]
+    factor = ngpu*2
+    if ngpu==1:
+        return output
+    elif ngpu==3:
+        first = torch.cat([output[:l//factor], output[2*l//factor:3*l//factor],output[4*l//factor:5*l//factor]], dim=0)
+        second = torch.cat([output[l//factor:2*l//factor], output[3*l//factor:4*l//factor],output[5*l//factor:]], dim=0)
+    elif ngpu==4:
+        first = torch.cat([output[:l//factor], output[2*l//factor:3*l//factor],output[4*l//factor:5*l//factor],output[6*l//factor:7*l//factor]], dim=0)
+        second = torch.cat([output[l//factor:2*l//factor], output[3*l//factor:4*l//factor],output[5*l//factor:6*l//factor],output[7*l//factor:]], dim=0)
+    return torch.cat([first,second],dim=0) 
 
 class Runner():
     def __init__(self, learn, cbs=None):
@@ -43,9 +56,6 @@ class Runner():
     def model(self): return self.learn.model
 
     @property
-    def model_big(self): return self.learn.model_big
-
-    @property
     def loss_func(self): return self.learn.loss_func
 
     @property
@@ -59,13 +69,12 @@ class Runner():
              
             self.handle("begin_batch")
             self.pred = self.learn.model(self.xb)
-            #self.pred1 = self.learn.model(self.xb) 
-            #self.pred_big = self.learn.model_big(self.xb)
+            #self.pred = updateSequenceOutput(self.pred,self.learn.ngpu) 
             
-            #print(self.learn.model_big(torch.ones(64, 3, 128, 128).cuda()).sum()) 
             self.handle("after_pred")                
             
             self.loss = self.learn.loss_func(self.pred,self.yb)
+            #print(self.loss)
             self.handle("after_loss")
             
             if not self.in_train: return 
