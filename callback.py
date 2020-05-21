@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import os
+from convFaster import *
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
 from parallel import DataParallelModel, DataParallelCriterion
@@ -64,14 +65,11 @@ class CudaCallback(CallBacks):
     
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.to(self.device),self.yb.to(self.device)
 
-class GradientPrintCallback(CallBacks):
-    def after_batch(self):
-        #pass  # print("callback called")
-        #print('weight',self.model[1].weight,'\n')
-        #print('bias', self.model[1].bias,'\n')
-        #print('weight grad',self.model[1].weight.grad,'\n')
-        self.learn.opt.zero_grad()
-        if self.iter >= 1 : raise CancelTrainException()
+class lossScheduler(CallBacks):
+    def after_epoch(self):
+        x = self.epoch/self.epochs
+        # min(4*(x**2),1)
+        self.learn.loss_func = MyCrossEntropy(min(4*(x**2),1))
                          
 class Stats():
     def __init__(self, metrics, in_train):
@@ -217,7 +215,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/"):
+    def __init__(self,name,save_dir="/home/ubuntu/datadrive/model/"):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):

@@ -69,7 +69,7 @@ class Runner():
              
             self.handle("begin_batch")
             self.pred = self.learn.model(self.xb)
-            #self.pred = updateSequenceOutput(self.pred,self.learn.ngpu) 
+            self.pred = updateSequenceOutput(self.pred,self.learn.ngpu) 
             
             self.handle("after_pred")                
             

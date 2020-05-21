@@ -22,7 +22,7 @@ def load_model(model, state_dict_file_path=None):
         model.load_state_dict(torch.load(state_dict_file_path))
     return model
 
-def imagenet_resize(x): return x.view(-1, 3, 128, 128)
+def imagenet_resize(x): return x.view(-1, 3, 224, 224)
 
 if __name__ == "__main__":
    start = time.time()
@@ -30,26 +30,26 @@ if __name__ == "__main__":
    #torch.cuda.set_device(device)
    #device = 'cuda' if torch.cuda.is_available() else 'cpu'
    ngpu = torch.cuda.device_count()
-   batch_size = 512
-   image_size = 128
-   c = 10
+   batch_size = 200
+   image_size = 224
+   c = 1000
    train = True
-   data = load_data(batch_size, image_size,2)
+   data = load_data(batch_size, image_size,0)
    lr_finder = False
-   is_individual_training = True
-   last_epoch_done_idx = None
+   is_individual_training = False
+   last_epoch_done_idx = 20
    # Also change file name accordingly
    is_sgd = False
 
    if is_sgd:
       print("SGD")
-      lr = 0.8
+      lr = 1.6
       lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10,lr), sched_cos(lr, lr/1e5)])
       lr_scheduler = ParamScheduler('lr', lr_sched,using_torch_optim=True)
       cbfs = [lr_scheduler,CudaCallback(device)]
    else:
       print("adam")
-      lr = (1e-2)
+      lr = (4e-3)
       lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
       beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
       lr_scheduler = ParamScheduler('lr', lr_sched)
@@ -61,14 +61,17 @@ if __name__ == "__main__":
       compression_factor = 1
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
-      model = xresnet18(c_out=c,resize=imagenet_resize,compression_factor=compression_factor)
+      model = xresnet50(c_out=c,resize=imagenet_resize,compression_factor=compression_factor)
    else:
       # currently need to set compression rate manually in convFaster.py
       epoch = 100
-      loss_func = MyCrossEntropy()
-      cbfs+=[AvgStatsCallback()]
+      x = last_epoch_done_idx/epoch
+      val =  min(4*(x**2),1)
+      loss_func = MyCrossEntropy(val)
+      #cbfs+=[lossScheduler(),SaveModelCallback("combined4-adam-4e-3-quadratic"),AvgStatsCallback()]
+      cbfs+=[lossScheduler(),SaveModelCallback("combined4-sgd-1.2-quadratic"),AvgStatsCallback()]
       model = xresnet_fast50(device1=device,c_out=c,resize=imagenet_resize)
-      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/combined-50-4/{}.pt".format(last_epoch_done_idx)) 
+      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/home/ubuntu/experiment/new-{}.pt".format(last_epoch_done_idx)) 
 
    model = nn.DataParallel(model)
    model = model.to(device)

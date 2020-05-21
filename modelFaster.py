@@ -3,7 +3,7 @@ import torch.nn.init as init
 from myconv import myconv2d
 from mask import *
 from convFaster import *
-
+from collections import OrderedDict
 randommask = 1
 device = None
 
@@ -109,31 +109,6 @@ def nll(out, yb):
     nll1 = F.nll_loss(log_preds, yb)
     return nll1
 
-class mySequential(nn.Sequential):
-    def forward(self, input,target):
-        for module in self._modules.values():
-            input = module(input)
-
-        output = input
-        l,_ = output.shape
-        log_preds1 = F.log_softmax(output[:l//2], dim=-1)
-        log_preds2 = F.log_softmax(output[l//2:], dim=-1)
-
-        nll1 = F.nll_loss(log_preds1, target)
-
-        prob1 = F.softmax(output[:l//2], dim=-1)
-        prob2 = F.softmax(output[l//2:], dim=-1)
-        kl = (prob1 * torch.log(1e-6+prob1/(prob2+1e-6))).sum(1)
-
-        global device
-        loss =  torch.tensor([nll1 + kl.mean()]).to(device)
-        print(loss)
-        top1_big = accuracy_faster(output,target)
-        top5_big = top_k_accuracy_faster(output,target)
-        top1_small = accuracy1_faster(output,target)
-        top5_small = top_k_accuracy1_faster(output,target)
-        
-        return loss,[nll(output,target),top1_big,top5_big,top1_small,top5_small]
 
 class XResNet(nn.Sequential):
 
@@ -141,7 +116,7 @@ class XResNet(nn.Sequential):
     def create(cls, expansion,  layers, c_in=3, c_out=10, resize=cifar_resize):
         nbs = [c_in, 16,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False)
-                for i in range(2)]
+                for i in range(3)]
 
         maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
@@ -168,9 +143,25 @@ def xresnet_fast18 (mask=1,**kwargs):
     return XResNet.create(1, [2, 2,  2, 2], **kwargs)
 
 def xresnet_fast34 (**kwargs): return XResNet.create(1, [3, 4,  6, 3], **kwargs)
-def xresnet_fast50 (device1,**kwargs):
-    global device
-    device = device1
+def xresnet_fast50 (device1=None,**kwargs):
     return XResNet.create(4, [3, 4,  6, 3], **kwargs)
 def xresnet_fast101(**kwargs): return XResNet.create(4, [3, 4, 23, 3], **kwargs)
 def resnet_fast152(**kwargs): return XResNet.create(4, [3, 8, 36, 3], **kwargs)
+
+
+'''
+def readModel(path,name):
+    state_dict = torch.load(path)
+    new_state_dict = OrderedDict()
+    change_started = False
+    for k,v in state_dict.items():
+        key = k[7:]
+        new_state_dict[key] = v
+
+    model = xresnet_fast50(resize=imagenet_resize,c_out=1000)
+    model.load_state_dict(new_state_dict)
+    torch.save(new_state_dict,name)
+
+path = '/home/ubuntu/datadrive/model/combined4-adam-4e-3-quadratic/20.pt'
+readModel(path,"new-20.pt")
+'''

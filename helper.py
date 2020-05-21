@@ -75,7 +75,7 @@ def load_cifar_data(batch_size, image_size,size):
 
 def load_data(batch_size, image_size, dataset=1):
     if dataset==0:
-        path = Path('/scratch/work/public/imagenet/')
+        path = Path('/home/ubuntu/datadrive/imagenet/')
     elif dataset==1:
         path = datasets.untar_data(datasets.URLs.IMAGENETTE_160)
     elif dataset==2:
