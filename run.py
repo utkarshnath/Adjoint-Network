@@ -59,10 +59,7 @@ class Runner():
              
             self.handle("begin_batch")
             self.pred = self.learn.model(self.xb)
-            #self.pred1 = self.learn.model(self.xb) 
-            #self.pred_big = self.learn.model_big(self.xb)
             
-            #print(self.learn.model_big(torch.ones(64, 3, 128, 128).cuda()).sum()) 
             self.handle("after_pred")                
             
             self.loss = self.learn.loss_func(self.pred,self.yb)
@@ -82,7 +79,6 @@ class Runner():
         except CancelBatchException: self.handle("after_cancel_batch")
         finally:  
             self.handle("after_batch")
-            #print()
 
 
     def all_batches(self, dataloader):

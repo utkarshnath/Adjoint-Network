@@ -3,10 +3,9 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import os
-from convFaster import *
+from adjointNetwork import *
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
-from parallel import DataParallelModel, DataParallelCriterion
 
 class CallBacks():
     _order = 0
@@ -54,22 +53,16 @@ def nll(out, yb):
     return nll1
 
 class CudaCallback(CallBacks):
-    #def __init__(self,device):
-        #self.device = device
 
     def begin_fit(self):
-        #print(torch.cuda.current_device())
         self.model.cuda()
-        #self.model = nn.DataParallel(self.model)
-        #self.model = self.model.to(self.device)
     
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
 class lossScheduler(CallBacks):
     def after_epoch(self):
         x = self.epoch/self.epochs
-        # min(4*(x**2),1)
-        self.learn.loss_func = MyCrossEntropy(min(4*(x**2),1))
+        self.learn.loss_func = AdjointLoss(min(4*(x**2),1))
            
            
                          

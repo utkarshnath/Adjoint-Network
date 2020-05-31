@@ -7,8 +7,6 @@ from IPython.core.debugger import set_trace
 import matplotlib.pyplot as plt
 from functools import partial
 from torch.utils.data import DataLoader, Dataset
-#from datablock import make_rgb, np_to_float, to_byte_tensor, to_float_tensor
-#from datablock import Data, ResizeFixed, RandomResizedCrop, CenterCrop, PilRandomFlip
 from run import DataBunch
 from datablock import *
 from helper import *
@@ -63,11 +61,9 @@ def load_cifar_data(batch_size, image_size,size):
     else:
        path = datasets.untar_data(URLs.CIFAR_100)
     stats = (np.array([ 0.4914 ,  0.48216,  0.44653]), np.array([ 0.24703,  0.24349,  0.26159]))
-    #tfms = tfms_from_stats(stats, image_size, aug_tfms=[RandomFlip()], pad=image_size//8)
     
     tfms = (get_transforms(do_flip=True,flip_vert=False,max_rotate=25))
     data = ImageDataBunch.from_folder(path, valid='test', size=image_size,ds_tfms=tfms,bs = batch_size)
-    # normalising the dataset using the same normalisation applied to the imagenet dataset
     data.normalize(imagenet_stats)
 
     print("Loaded data")
@@ -83,7 +79,6 @@ def load_data(batch_size, image_size, dataset=1):
         path = datasets.untar_data(datasets.URLs.IMAGEWOOF_160)
     
     train_transforms = [make_rgb, RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
-    #train_transforms = [make_rgb, ResizeFixed(image_size), PilRandomFlip(), to_byte_tensor, to_float_tensor]
     valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]    
 
     data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=8)
@@ -91,7 +86,6 @@ def load_data(batch_size, image_size, dataset=1):
     return data
 
 def load_fastai_data(batch_size, image_size):
-    #path = datasets.untar_data('/archive/u/un270/food-101.tgz')
     path = untar_data(URLs.PETS)
     path_img = path/'images'
     fnames = get_image_files(path_img)

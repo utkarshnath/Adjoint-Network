@@ -2,7 +2,6 @@ import torch.nn as nn
 import torch.nn.init as init
 from myconv import myconv2d
 from mask import *
-from convFaster import *
 
 randommask = 1
 
@@ -26,26 +25,8 @@ act_func = nn.ReLU()
 first = True
 def conv(ni, no, ks, s=1, bias=False,mask_layer=False):
     return nn.Conv2d(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)
-    '''if no>64:
-       mask_layer = True
-    else:
-       mask_layer = False
-    global first
-    if first:
-        first = False
-        return conv2dFirstLayer(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer)
-        
-    return conv2dFaster(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer)
-    '''
-'''
-def init_cnn(m):
-    if isinstance(m, (nn.Conv2d, nn.Linear)): init.kaiming_normal_(m.weight, a=1.0)
-    if getattr(m, 'bias', None) is not None: init.constant_(m.bias, 0.)
-    for l in m.children(): init_cnn(l)
-'''
 
 def conv_layer(ni, no, ks, s, zero_bn=False, act=True,mask_layer=True):
-    #print('conv ','ni ',ni,'no ',no,ks,s)
     bn = nn.BatchNorm2d(no)
     nn.init.constant_(bn.weight, 0. if zero_bn else 1.)
     layers = [conv(ni, no, ks=ks, s=s,mask_layer=mask_layer), bn]
@@ -55,28 +36,17 @@ def conv_layer(ni, no, ks, s, zero_bn=False, act=True,mask_layer=True):
 class ResBlock(nn.Module):
     def __init__(self, ni, no, expansion, s=1):
         super().__init__()
-        #print('Res ni ',ni,'no ',no)
         ni *= expansion
-        if no>64 and ni>64:
-           layers = [conv_layer(ni, no, 3, s),nn.Dropout(0.5),
-                     conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False),nn.Dropout(0.5) 
-           ] if expansion == 1 else [
-               conv_layer(ni, no, 1, 1),nn.Dropout(0.5),
-               conv_layer(no, no, 3, s),nn.Dropout(0.5),
-               conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False),nn.Dropout(0.5)
-           ]
-        else:
-           layers = [conv_layer(ni, no, 3, s),
-                     conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False)
-           ] if expansion == 1 else [
-               conv_layer(ni, no, 1, 1),
-               conv_layer(no, no, 3, s),
-               conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False)
-           ]
+        layers = [conv_layer(ni, no, 3, s),
+                  conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False) 
+        ] if expansion == 1 else [
+            conv_layer(ni, no, 1, 1),
+            conv_layer(no, no, 3, s),
+            conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False)
+        ]
         self.convs = nn.Sequential(*layers)
         self.idconv = noop if ni == no*expansion else conv_layer(ni, no*expansion, 1, 1, act=False)  
         self.pool = noop if s == 1 else nn.AvgPool2d(2,ceil_mode=True)
-
 
     def forward(self, x):
         return act_func(self.convs(x) + self.idconv(self.pool(x)))
@@ -99,7 +69,6 @@ class XResNet(nn.Sequential):
         layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), nn.Linear(nbs[-1]*expansion, c_out) ])
         
         resnet = cls(*layers)        
-        #init_cnn(resnet)        
         return resnet
 
     @staticmethod
