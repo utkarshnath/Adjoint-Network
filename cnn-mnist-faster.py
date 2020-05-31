@@ -87,14 +87,14 @@ def conv4(data):
 def conv6(data):
     return nn.Sequential(
         Lambda(cifar_resize),
-        conv2dFirstLayer(3,64,3, padding=1,stride=1),nn.ReLU(),  # padding = same
-        conv2dFaster( 64,64,3, padding=1,stride=1),nn.ReLU(),
+        conv2dFirstLayer(3,64,3, padding=1,stride=1,mask_layer=False),nn.ReLU(),  # padding = same
+        conv2dFaster( 64,64,3, padding=1,stride=1,mask_layer=False),nn.ReLU(),
         nn.MaxPool2d(2,stride=2),
-        conv2dFaster( 64,128,3, padding=1,stride=1),nn.ReLU(),  # padding = same
-        conv2dFaster( 128,128,3, padding=1,stride=1),nn.ReLU(),
+        conv2dFaster( 64,128,3, padding=1,stride=1,mask_layer=True),nn.ReLU(),  # padding = same
+        conv2dFaster( 128,128,3, padding=1,stride=1,mask_layer=True),nn.ReLU(),
         nn.MaxPool2d(2,stride=2),
-        conv2dFaster( 128,256,3, padding=1,stride=1),nn.ReLU(),  # padding = same
-        conv2dFaster( 256,256,3, padding=1,stride=1),nn.ReLU(),
+        conv2dFaster( 128,256,3, padding=1,stride=1,mask_layer=True),nn.ReLU(),  # padding = same
+        conv2dFaster( 256,256,3, padding=1,stride=1,mask_layer=True),nn.ReLU(),
         nn.MaxPool2d(2,stride=2),
         Lambda(flatten),
         linear(4096,256),nn.ReLU(),
@@ -103,7 +103,23 @@ def conv6(data):
     )
 
 
-
+def conv6_in(data):
+    return nn.Sequential(
+        Lambda(cifar_resize),
+        nn.Conv2d( 3,64,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        nn.Conv2d( 64,64,3, padding=1,stride=1),nn.ReLU(),
+        nn.MaxPool2d(2,stride=2),
+        nn.Conv2d( 64,128,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        nn.Conv2d( 128,128,3, padding=1,stride=1),nn.ReLU(),
+        nn.MaxPool2d(2,stride=2),
+        nn.Conv2d( 128,256,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        nn.Conv2d( 256,256,3, padding=1,stride=1),nn.ReLU(),
+        nn.MaxPool2d(2,stride=2),
+        Lambda(flatten),
+        nn.Linear(4096,256),nn.ReLU(),
+        nn.Linear(256,256),nn.ReLU(),
+        nn.Linear(256,c)
+    )
 
 def load_model(model, state_dict_file_path=None):
     if state_dict_file_path is not None:
@@ -113,27 +129,20 @@ def load_model(model, state_dict_file_path=None):
 
 if __name__ == "__main__":
    start = time.time()
-   #device = torch.device('cuda')
-   #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-   #torch.cuda.set_device(device)
    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
    batch_size = 64
    image_size = 32
-   c = 100
+   c = 10
    train = False
    lr_finder = False
-   is_individual_training = False
+   compression_factor = 4
+   masking_factor = 0.5
+   is_individual_training = True
    #data = get_data_bunch(batch_size)
    data = load_cifar_data(batch_size, image_size,c)
-   
-   #lr = 0.1
-   #lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e4)])
-   #lr_scheduler = ParamScheduler('lr', lr_sched)
-   #cbfs = [lr_scheduler,CudaCallback()]
-   
 
-   lr = 8e-4
+   lr = 1e-3
    lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
    beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
    lr_scheduler = ParamScheduler('lr', lr_sched)
@@ -141,26 +150,22 @@ if __name__ == "__main__":
    cbfs = [lr_scheduler,beta1_scheduler,CudaCallback()]
 
    if is_individual_training:
-      epoch = 150
+      epoch = 100
       compression_factor = 1
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       model = xresnet50(c_out=c,compression_factor=compression_factor)
    else:
-      # currently need to set compression rate manually in convFaster.py
-      epoch = 200
-      loss_func = MyCrossEntropy(1)
-      cbfs+=[AvgStatsCallback()]
-      model = xresnet_fast50(c_out=c)
-      #model = load_model(model, state_dict_file_path="/home/un270/experiments/mymodel/cifar100134.pt")
+      epoch = 100
+      loss_func = MyCrossEntropy(0)
+      cbfs+=[AvgStatsCallback(),lossScheduler()]
+      model = xresnet_fast50(c_out=c, compression_factor=compression_factor, masking_factor=masking_factor)
    
 
    end = time.time()
    print("Loaded model", end-start)
 
-   #opt = optim.SGD(model.parameters(),lr)
-   opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],
-        stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
+   opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
    learn = Learn(model,opt,loss_func, data)
    if lr_finder:
       cbfs = [CudaCallback(),LR_find(max_iters=89),Recorder()]
@@ -168,6 +173,3 @@ if __name__ == "__main__":
    run = Runner(learn,cbs = cbfs)
    run.fit(epoch)
 
-if lr_finder:
-   print(cbfs[-1].lrs)
-   print(cbfs[-1].losses)

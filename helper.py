@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, Dataset
 #from datablock import Data, ResizeFixed, RandomResizedCrop, CenterCrop, PilRandomFlip
 from run import DataBunch
 from datablock import *
+from helper import *
 
 MNIST_URL='http://deeplearning.net/data/mnist/mnist.pkl'
 CIFAR10_URL = 'https://s3.amazonaws.com/fast-ai-imageclas/cifar10.tgz'
@@ -89,4 +90,13 @@ def load_data(batch_size, image_size, dataset=1):
     print("Loaded data")
     return data
 
+def load_fastai_data(batch_size, image_size):
+    #path = datasets.untar_data('/archive/u/un270/food-101.tgz')
+    path = untar_data(URLs.PETS)
+    path_img = path/'images'
+    fnames = get_image_files(path_img)
+    pat = r'/([^/]+)_\d+.jpg$'
+    data = ImageDataBunch.from_name_re(path_img, fnames, pat, ds_tfms=get_transforms(), size=image_size, bs=batch_size).normalize(imagenet_stats)
 
+    print("Loaded data")
+    return data

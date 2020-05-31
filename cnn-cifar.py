@@ -1,18 +1,20 @@
-from helper import get_data_bunch,load_data,load_cifar_data
+from helper import *
 from run import Runner, Learn
 from IPython.core.debugger import set_trace
 from torch import tensor, nn, optim
-from callback import LR_find,Recorder,AvgStatsCallback,CudaCallback,GradientPrintCallback,ParamScheduler
+from callback import *
 import torch
 import torch.nn.functional as F
 from mask import *
+from optimizers import *
 from torch.nn.parameter import Parameter
 # from .. import init
 from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos
 from myconv import myconv2d
-from model import xresnet18
+from model import *
 import time
+from modelFaster import xresnet_fast18,xresnet_fast34,xresnet_fast50
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -76,18 +78,36 @@ def conv4(data):
         nn.Linear(256,c)
     )
 
-
-def conv6(data):
+def conv6_adjoint(compression_factor,masking_factor):
     return nn.Sequential(
         Lambda(cifar_resize),
-        myconv2d( 3,64,3, padding=1,stride=1,mask=randomShape(64,3,3,3,0.8)),nn.ReLU(),  # padding = same
-        myconv2d( 64,64,3, padding=1,stride=1,mask=randomShape(64,64,3,3,0.8)),nn.ReLU(),
+        conv2dFirstLayer(3,64,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        conv2dFaster( 64,64,3, padding=1,stride=1,mask_layer=False),nn.ReLU(),
         nn.MaxPool2d(2,stride=2),
-        myconv2d( 64,128,3, padding=1,stride=1,mask=randomShape(128,64,3,3,0.8)),nn.ReLU(),  # padding = same
-        myconv2d( 128,128,3, padding=1,stride=1,mask=randomShape(128,128,3,3,0.8)),nn.ReLU(),
+        conv2dFaster( 64,128,3, padding=1,stride=1,mask_layer=False,compression_factor=compression_factor,masking_factor=masking_factor),nn.ReLU(),  # padding = same
+        conv2dFaster( 128,128,3, padding=1,stride=1,mask_layer=False,compression_factor=compression_factor,masking_factor=masking_factor),nn.ReLU(),
         nn.MaxPool2d(2,stride=2),
-        myconv2d( 128,256,3, padding=1,stride=1,mask=randomShape(256,128,3,3,0.8)),nn.ReLU(),  # padding = same
-        myconv2d( 256,256,3, padding=1,stride=1,mask=randomShape(256,256,3,3,0.8)),nn.ReLU(),
+        conv2dFaster( 128,256,3, padding=1,stride=1,mask_layer=True,compression_factor=compression_factor,masking_factor=masking_factor),nn.ReLU(),  # padding = same
+        conv2dFaster( 256,256,3, padding=1,stride=1,mask_layer=True,compression_factor=compression_factor,masking_factor=masking_factor),nn.ReLU(),
+        nn.MaxPool2d(2,stride=2),
+        Lambda(flatten),
+        linear(4096,256),nn.ReLU(),
+        linear(256,256),nn.ReLU(),
+        linear(256,c)
+    )
+
+
+def conv6_individual(data):
+    return nn.Sequential(
+        Lambda(cifar_resize),
+        nn.Conv2d( 3,64,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        nn.Conv2d( 64,64,3, padding=1,stride=1),nn.ReLU(),
+        nn.MaxPool2d(2,stride=2),
+        nn.Conv2d( 64,128,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        nn.Conv2d( 128,128,3, padding=1,stride=1),nn.ReLU(),
+        nn.MaxPool2d(2,stride=2),
+        nn.Conv2d( 128,256,3, padding=1,stride=1),nn.ReLU(),  # padding = same
+        nn.Conv2d( 256,256,3, padding=1,stride=1),nn.ReLU(),
         nn.MaxPool2d(2,stride=2),
         Lambda(flatten),
         nn.Linear(4096,256),nn.ReLU(),
@@ -95,45 +115,54 @@ def conv6(data):
         nn.Linear(256,c)
     )
 
+def imagenet_resize(x): return x.view(-1, 3, 224, 224)
+
+
 if __name__ == "__main__":
    start = time.time()
-   device = torch.device('cuda',0)
-   torch.cuda.set_device(device)
-   batch_size = 32
-   image_size = 32
-   c = 100
-   data = load_cifar_data(batch_size, image_size,100)
-   loss_func = F.cross_entropy
+   device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+   batch_size = 64
+   image_size = 224
+   c = 37
+   train = False
    lr_finder = False
-   mask = randomShape1(3,3,0.8)
-   print(mask)
-   #a = torch.zeros(3,3).cuda()
-   #a[0][1] = a[1][0] = 1
-   #a[0][1] = a[1][0] = a[1][2] = a[2][1] = 1
-   #a[0][1] = a[1][2] = 0
-   #print(a)
-   model = xresnet18(mask)
+   compression_factor = 8
+   masking_factor = 0.5
+   is_individual_training = True
+   #data = get_data_bunch(batch_size)
+   data = load_fastai_data(batch_size, image_size)
+
+   lr = 1e-3
+   lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
+   beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
+   lr_scheduler = ParamScheduler('lr', lr_sched)
+   beta1_scheduler = ParamScheduler('beta1', beta1_sched)
+   cbfs = [lr_scheduler,beta1_scheduler,CudaCallback()]
+
+   if is_individual_training:
+      epoch = 100
+      compression_factor = 1
+      loss_func = F.cross_entropy
+      cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      #model = conv6_individual(data)
+      model = xresnet50(c_out=c,resize=imagenet_resize,compression_factor=compression_factor)
+   else:
+      # currently need to set compression rate manually in convFaster.py
+      epoch = 100
+      loss_func = MyCrossEntropy(0)
+      cbfs+=[AvgStatsCallback(),lossScheduler()]
+      #model = conv6(data)
+      model = xresnet_fast50(c_out=c,resize=imagenet_resize ,compression_factor=compression_factor, masking_factor=masking_factor)
+
    end = time.time()
    print("Loaded model", end-start)
-   lr = 0.1
-   lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
-   lr_scheduler = ParamScheduler('lr', lr_sched)
 
-   opt = optim.SGD(model.parameters(),lr)
+
+   opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
    learn = Learn(model,opt,loss_func, data)
-   cbfs = [lr_scheduler,CudaCallback(),AvgStatsCallback()] #cuda
    if lr_finder:
-      cbfs = [CudaCallback(),LR_find(max_iters=40),Recorder()]
+      cbfs = [CudaCallback(),LR_find(max_iters=89),Recorder()]
 
    run = Runner(learn,cbs = cbfs)
-   run.fit(100)
-   #print(model[1].weight)
-   #print()
-   #print(model[3].weight)
-   #print()
-   #print(model[5].weight)
-   #print(model.layer[2].weight)
-
-if lr_finder:
-   print(cbfs[-1].lrs)
-   print(cbfs[-1].losses)
+   run.fit(epoch)

@@ -100,31 +100,20 @@ class Runner():
         self.epochs = epochs 
         self.start_epoch = start_epoch
         try:
-            if train:
-               self.handle("begin_fit")        
-               for epoch in range(start_epoch, epochs):
-                   self.epoch = epoch
-                   self.learn.model.train()
-                   self.in_train = True
+            self.handle("begin_fit")        
+            for epoch in range(start_epoch, epochs):
+                self.epoch = epoch
+                self.learn.model.train()
+                self.in_train = True
                 
-                   self.all_batches(self.learn.data.train_dl) 
+                self.all_batches(self.learn.data.train_dl) 
                 
-                   self.learn.model.eval()
-                   self.in_train = False            
-                   with torch.no_grad():        
-                       self.all_batches(self.learn.data.valid_dl)
-       
-                   self.handle("after_epoch")
-            else:
                 self.learn.model.eval()
-                self.in_train = False
-                with torch.no_grad():
-                    self.epoch = 1
-                    start = time.time() 
-                    self.all_batches(self.learn.data.train_dl)
-                    end = time.time()
-                    print(end-start)
-                    self.handle("after_epoch")
+                self.in_train = False            
+                with torch.no_grad():        
+                    self.all_batches(self.learn.data.valid_dl)
+       
+                self.handle("after_epoch")
 
         except CancelTrainException: self.handle("after_cancel_train")
         finally:

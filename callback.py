@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import os
+from convFaster import *
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
 from parallel import DataParallelModel, DataParallelCriterion
@@ -64,14 +65,13 @@ class CudaCallback(CallBacks):
     
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
 
-class GradientPrintCallback(CallBacks):
-    def after_batch(self):
-        #pass  # print("callback called")
-        #print('weight',self.model[1].weight,'\n')
-        #print('bias', self.model[1].bias,'\n')
-        #print('weight grad',self.model[1].weight.grad,'\n')
-        self.learn.opt.zero_grad()
-        if self.iter >= 1 : raise CancelTrainException()
+class lossScheduler(CallBacks):
+    def after_epoch(self):
+        x = self.epoch/self.epochs
+        # min(4*(x**2),1)
+        self.learn.loss_func = MyCrossEntropy(min(4*(x**2),1))
+           
+           
                          
 class Stats():
     def __init__(self, metrics, in_train):
@@ -101,26 +101,6 @@ class Stats():
             self.tol_metrics[i] += batch_size * metric(run.pred, run.yb)
         self.count += batch_size
 
-'''
-# should run after cuda but before everything else
-class ParamScheduler(CallBacks):
-    _order = 5
-    
-    def __init__(self, pname, sched_func, using_torch_optim=False):
-        self.pname = pname
-        self.sched_func = sched_func 
-        self.iter = 0.0
-
-
-    def set_param(self):
-        self.iter += 1.0/self.iters
-        for p in self.opt.param_groups:
-            p[self.pname] = self.sched_func((self.iter+self.start_epoch)/self.epochs)
-   
-    def begin_batch(self): 
-        if self.in_train: self.set_param()
-
-'''
 class ParamScheduler(CallBacks):
     _order = 5
     
@@ -135,7 +115,6 @@ class ParamScheduler(CallBacks):
 
         hypers = self.opt.param_groups       
         if not self.using_torch_optim:
-            print("Trying adam")
             hypers = self.opt.hypers 
        
         for h in hypers:
@@ -218,7 +197,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/"):
+    def __init__(self,name,save_dir="/scratch/un270/model-stem3/"):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):
@@ -226,9 +205,17 @@ class SaveModelCallback(CallBacks):
         self.model_directory = model_directory
 
     def after_epoch(self):
-        if self.epoch>0:
-           curr_name = os.path.join(self.model_directory, str(self.epoch) + ".pt")
-           torch.save(self.learn.model.state_dict(), curr_name) 
+        curr_name = os.path.join(self.model_directory, str(self.epoch) + ".pt")
+        torch.save(self.learn.model.state_dict(), curr_name) 
+
+# Should run after stats callback
+class InferenceCallback(CallBacks):
+    _order = 51 
+
+    def begin_epoch(self):
+        if self.in_train: raise CancelEpochException()
+ 
+    def after_epoch(self): raise CancelTrainException()
 
 # should probably run at the end of other call backs
 class AvgStatsCallback(CallBacks):

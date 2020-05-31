@@ -57,22 +57,28 @@ class ResBlock(nn.Module):
         super().__init__()
         #print('Res ni ',ni,'no ',no)
         ni *= expansion
-        layers = [conv_layer(ni, no, 3, s),
-                  conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False) 
-        ] if expansion == 1 else [
-            conv_layer(ni, no, 1, 1),
-            conv_layer(no, no, 3, s),
-            conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False)
-        ]
+        if no>64 and ni>64:
+           layers = [conv_layer(ni, no, 3, s),nn.Dropout(0.5),
+                     conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False),nn.Dropout(0.5) 
+           ] if expansion == 1 else [
+               conv_layer(ni, no, 1, 1),nn.Dropout(0.5),
+               conv_layer(no, no, 3, s),nn.Dropout(0.5),
+               conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False),nn.Dropout(0.5)
+           ]
+        else:
+           layers = [conv_layer(ni, no, 3, s),
+                     conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False)
+           ] if expansion == 1 else [
+               conv_layer(ni, no, 1, 1),
+               conv_layer(no, no, 3, s),
+               conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False)
+           ]
         self.convs = nn.Sequential(*layers)
         self.idconv = noop if ni == no*expansion else conv_layer(ni, no*expansion, 1, 1, act=False)  
-        #self.idconv = noop if ni == no*expansion or (ni==64 and no==16) else conv_layer(ni, no*expansion, 1, 1, act=False)
         self.pool = noop if s == 1 else nn.AvgPool2d(2,ceil_mode=True)
 
 
     def forward(self, x):
-        #print(self.convs(x).shape)
-        #print(self.idconv(self.pool(x)).shape)
         return act_func(self.convs(x) + self.idconv(self.pool(x)))
 
 class XResNet(nn.Sequential):

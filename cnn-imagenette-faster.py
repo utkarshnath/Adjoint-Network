@@ -28,18 +28,19 @@ if __name__ == "__main__":
    start = time.time()
    device = torch.device('cuda',0)
    torch.cuda.set_device(device)
-   #device = 'cuda' if torch.cuda.is_available() else 'cpu'
-   #n_gpu = torch.cuda.device_count()
-   batch_size = 32
+   batch_size = 64
    image_size = 224
-   c = 1000
+   c = 10
    train = True
-   data = load_data(batch_size, image_size,0)
+   data = load_data(batch_size, image_size,2)
    lr_finder = False
-   is_individual_training = True
+   is_individual_training = False
    last_epoch_done_idx = None
+   compression_factor = 8
+   masking_factor = 0.7
+   epoch = 100
    # Also change file name accordingly
-   is_sgd = True
+   is_sgd = False
 
    if is_sgd:
       print("SGD")
@@ -57,22 +58,14 @@ if __name__ == "__main__":
       cbfs = [lr_scheduler,beta1_scheduler,CudaCallback()]
  
    if is_individual_training:
-      epoch = 60
-      compression_factor = 1
       loss_func = F.cross_entropy
-      cbfs+=[SaveModelCallback("individual-18-original"),AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
-      model = xresnet18(c_out=c,resize=imagenet_resize,compression_factor=compression_factor)
+      cbfs+=[InferenceCallback(),AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      model = xresnet50(c_out=c,resize=imagenet_resize,compression_factor=compression_factor)
    else:
-      # currently need to set compression rate manually in convFaster.py
-      epoch = 80
-      loss_func = MyCrossEntropy(1)
-      cbfs+=[SaveModelCallback("combined-50-16"),AvgStatsCallback()]
-      #cbfs+=[AvgStatsCallback()]
-      model = xresnet_fast50(c_out=c,resize=imagenet_resize)
-      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/combined-50-4/{}.pt".format(last_epoch_done_idx)) 
-
-   #model = nn.DataParallel(model)
-   #model = model.to(device)
+      loss_func = MyCrossEntropy(0)
+      cbfs+=[lossScheduler(),AvgStatsCallback()]
+      model = xresnet_fast50(c_out=c, resize=imagenet_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model-stem3/combined8-50-sgd/{}.pt".format(last_epoch_done_idx)) 
 
    end = time.time()
    print("Loaded model", end-start)
@@ -90,6 +83,3 @@ if __name__ == "__main__":
    run = Runner(learn,cbs = cbfs)
    run.fit(epoch, start_epoch = 0 if last_epoch_done_idx is None else last_epoch_done_idx+1)  
 
-#if lr_finder:
-#   print(cbfs[-1].lrs)
-#   print(cbfs[-1].losses)

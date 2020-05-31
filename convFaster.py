@@ -5,6 +5,7 @@ from torch import tensor, nn
 import math
 import torch.nn.functional as F
 import time
+from mask import *
 
 def test(a,b,cmp,cname=None):
     if cname is None: cname=cmp.__name__
@@ -14,85 +15,42 @@ def near(a,b): return torch.allclose(a, b, rtol=1e-3, atol=1e-5)
 def test_near(a,b): test(a,b,near)
 
 class conv2dFirstLayer(nn.Conv2d):
-    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,mask=1,parts=4,*kargs,**kwargs):
-        super(conv2dFirstLayer, self).__init__(in_channels,out_channels,kernel_size,padding,stride,mask,*kargs, **kwargs)
-        #self.mask = torch.ones(parts,out_channels,in_channels,kernel_size,kernel_size).cuda()
-        #for i in range(1,parts):
-        #    start = out_channels - i*out_channels//parts
-        #    self.mask[i,start:out_channels] = 0
+    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,*kargs,**kwargs):
+        super(conv2dFirstLayer, self).__init__(in_channels,out_channels,kernel_size,padding,stride,*kargs, **kwargs)
         self.padding = (padding,padding)
         self.stride = (stride,stride)
-        self.mask_layer = mask_layer
 
     def forward(self,input):
-        # print(self.mask[0].sum(),self.mask[1].sum(),self.mask[2].sum(),self.mask[3].sum())
         a = F.conv2d(input,self.weight,self.bias,self.stride,self.padding,self.dilation, self.groups)
         concatinatedTensor = torch.cat([a, a], dim=0)
         return concatinatedTensor
 
 class conv2dFaster(nn.Conv2d):
-    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,mask=1,*kargs,**kwargs):
-        super(conv2dFaster, self).__init__(in_channels,out_channels,kernel_size,padding,stride,mask,*kargs, **kwargs)
-        #parts = 4
-        #self.mask = torch.ones(parts,out_channels,in_channels,kernel_size,kernel_size).cuda()
-        #self.parts = parts
-        #for i in range(1,parts):
-        #    start = out_channels - i*out_channels//parts
-        #    self.mask[i,start:out_channels] = 0
+    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,compression_factor=1,masking_factor=None,*kargs,**kwargs):
+        super(conv2dFaster, self).__init__(in_channels,out_channels,kernel_size,padding,stride,*kargs, **kwargs)
         self.padding = (padding,padding)
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
         self.out_channels = out_channels
-        self.compression_factor = 16
-        self.mask = 0
-        #self.mask[out_channels//self.compression_factor:] = 0
+        self.compression_factor = compression_factor
+        if masking_factor!=None:
+           self.mask = randomShape(kernel_size,kernel_size,masking_factor)
+        else:
+          self.mask = 1
         self.isFirst = True 
 
     def forward(self,input):
         l,_,_,_ = input.shape
-        out = F.conv2d(input,self.weight,self.bias,self.stride,self.padding)
-        if(self.isFirst):
-           self.isFirst = False
-           self.mask = torch.ones(out.shape).cuda()
-           self.mask[l//2:,self.out_channels//self.compression_factor:] = 0
+        a = F.conv2d(input[:l//2],self.weight,self.bias,self.stride,self.padding)
         if self.mask_layer:
-           if out.shape[0]!=self.mask.shape[0]:
-              out[l//2:,self.out_channels//self.compression_factor:] = 0
-           else:
-               out*=self.mask
-        
-        return out
-        
+           b = F.conv2d(input[l//2:],self.weight*self.mask,self.bias,self.stride,self.padding)
+           b[:,self.out_channels//self.compression_factor:] = 0
+           concatinatedTensor = torch.cat([a, b], dim=0)
+        else:
+           concatinatedTensor = torch.cat([a, a], dim=0)
 
-class myconv2dFaster(nn.Conv2d):
-    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,conpression_factor=4,*kargs,**kwargs):
-        super(myconv2dFaster, self).__init__(in_channels,out_channels,kernel_size,padding,stride,*kargs, **kwargs)
-        self.out_channels = out_channels
-        self.kernel_size = (kernel_size,kernel_size)
-        self.padding = (padding,padding)
-        self.stride = (stride,stride)
-        self.mask_layer = mask_layer
-        self.conpression_factor = conpression_factor
-        self.mask = torch.ones(self.out_channels).cuda() 
-
-    def forward(self,input):
-        N,c,h,w = input.shape
-        f = self.out_channels
-        unfolded_input = torch._C._nn.im2col(input,self.kernel_size,(1,1),self.padding,self.stride)
-        output_size = (h-self.kernel_size[0]+2*self.padding[0])//self.stride[0] + 1
-        unfolded_input = unfolded_input.reshape(2,N//2,unfolded_input.shape[1],unfolded_input.shape[2])
-        unfolded_weight = self.weight.view(self.out_channels,-1)
-        out = (unfolded_weight) @ unfolded_input
-        out = out.view(N,self.out_channels,output_size,output_size)
-        # check masking
-        if self.mask_layer:
-           mask = torch.ones(N,self.out_channels,output_size,output_size).cuda() 
-           mask[N//2:,self.out_channels//self.conpression_factor:] = 0
-           out = out * mask
-           return out
-        return out
-          
-           
+        return concatinatedTensor
+        
 class batchNorm(nn.Module):
     def __init__(self,num_features,*kargs,**kwargs):
         super(batchNorm,self).__init__(*kargs,**kwargs)
@@ -104,7 +62,6 @@ class batchNorm(nn.Module):
         l,_,_,_ = input.shape
         a = self.bn1(input[:l//2])
         d = self.bn2(input[l//2:])
-        #d = F.batch_norm(input[l//2:], self.running_mean, self.running_var, self.weight, self.bias) 
         concatinatedTensor = torch.cat([a, d], dim=0)
         return concatinatedTensor
 
@@ -129,12 +86,10 @@ class MyCrossEntropy(nn.Module):
         log_preds1 = F.log_softmax(output[:l//2], dim=-1)
         nll1 = F.nll_loss(log_preds1, target)
         
-        # log_preds2 = F.log_softmax(output[l//2:], dim=-1)
-        # nll2 = F.nll_loss(log_preds2, target)
-
         prob1 = F.softmax(output[:l//2], dim=-1)
         prob2 = F.softmax(output[l//2:], dim=-1)
-        kl = (prob1 * torch.log(prob1/(prob2+1e-6))).sum(1)
+        kl = (prob1 * torch.log(1e-6 + prob1/(prob2+1e-6))).sum(1)
+        
+        return nll1 + self.alpha * kl.mean()
 
-        return nll1 + kl.mean()
 
