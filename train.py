@@ -104,15 +104,15 @@ if __name__ == "__main__":
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       resnet = args.resnet
       if resnet==18:
-         model = xresnet18(c_out=c,resize=data_resize,compression_factor=compression_factor)
+         model = xresnet18(c_out=c,resize=data_resize)
       elif resnet==34:
-          model = xresnet34(c_out=c,resize=data_resize,compression_factor=compression_factor)
+          model = xresnet34(c_out=c,resize=data_resize)
       elif resnet==50:
-          model = xresnet50(c_out=c,resize=data_resize,compression_factor=compression_factor)
+          model = xresnet50(c_out=c,resize=data_resize)
       elif resnet==101:
-         model = xresnet101(c_out=c,resize=data_resize,compression_factor=compression_factor)
+         model = xresnet101(c_out=c,resize=data_resize)
       elif resnet==152:
-          model = xresnet152(c_out=c,resize=data_resize,compression_factor=compression_factor)
+          model = xresnet152(c_out=c,resize=data_resize)
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
    else:
