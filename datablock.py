@@ -8,7 +8,7 @@ from collections import Iterable
 import math
 import numpy as np
 
-from PIL import ImageFile
+from PIL import ImageFile, ImageEnhance
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import torch
@@ -125,16 +125,16 @@ class Data():
         self.train_ds = CuratedDataset(train_list, vocab)
         self.valid_ds = CuratedDataset(valid_list, vocab)
 
-    @property
-    def train_path(self): return self.path/'train'
-    @property
-    def valid_path(self): return self.path/'val'
+    #@property
+    #def train_path(self): return self.path/'train'
+    #@property
+    #def valid_path(self): return self.path/'val'
 
 
-    #@property
-    #def train_path(self): return '/scratch/work/public/imagenet/train'
-    #@property
-    #def valid_path(self): return '/scratch/un270/val' 
+    @property
+    def train_path(self): return '/scratch/work/public/imagenet/train'
+    @property
+    def valid_path(self): return '/scratch/un270/val' 
 
     @property
     def train_dl(self): return DataLoader(self.train_ds, self.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=self.num_workers)
@@ -163,6 +163,24 @@ class PilRandomFlip():
     def __init__(self, p=0.5): self.p=p
     def __call__(self, x):
         return x.transpose(PIL.Image.FLIP_LEFT_RIGHT) if random.random()<self.p else x
+
+
+class PilColor():
+    def __init__(self, l=0.6, u=1.4): self.l, self.u = l, u
+    def _get_between_lu(self): return (self.u-self.l)*np.random.random() + self.l
+    def __call__(self, x, *args):
+        b = self._get_between_lu()
+        c = self._get_between_lu()
+        s = self._get_between_lu()
+
+        b_enhancer = ImageEnhance.Brightness(x)
+        b_im = b_enhancer.enhance(b)
+        c_enhancer = ImageEnhance.Contrast(b_im)
+        c_im = c_enhancer.enhance(c)
+        s_enhancer = ImageEnhance.Sharpness(c_im)
+        s_im = s_enhancer.enhance(s)
+
+        return s_im
 
 
 def process_sz(sz):

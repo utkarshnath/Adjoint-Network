@@ -9,7 +9,7 @@ from functools import partial
 from torch.utils.data import DataLoader, Dataset
 from run import DataBunch
 from datablock import *
-from helper import *
+from torchvision import transforms
 
 MNIST_URL='http://deeplearning.net/data/mnist/mnist.pkl'
 CIFAR10_URL = 'https://s3.amazonaws.com/fast-ai-imageclas/cifar10.tgz'
@@ -78,10 +78,11 @@ def load_data(batch_size, image_size, dataset=1):
     elif dataset==2:
         path = datasets.untar_data(datasets.URLs.IMAGEWOOF_160)
     
-    train_transforms = [make_rgb, RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
+    train_transforms = [make_rgb,PilColor(l=0.6, u=1.4), RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float,transforms.Normalize(imagenet_stats[0],imagenet_stats[1])]
     valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]    
 
     data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=8)
+    
     print("Loaded data")
     return data
 

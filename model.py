@@ -33,6 +33,11 @@ def conv_layer(ni, no, ks, s, zero_bn=False, act=True,mask_layer=True):
     if act: layers += [act_func]
     return nn.Sequential(*layers)
 
+def init_cnn(m):
+    if isinstance(m, (nn.Conv2d, nn.Linear)): init.kaiming_normal_(m.weight, a=1.0)
+    if getattr(m, 'bias', None) is not None: init.constant_(m.bias, 0.)
+    for l in m.children(): init_cnn(l)
+
 class ResBlock(nn.Module):
     def __init__(self, ni, no, expansion, s=1):
         super().__init__()
@@ -55,7 +60,7 @@ class XResNet(nn.Sequential):
 
     @classmethod
     def create(cls, expansion,  layers, c_in=3, c_out=10,resize=cifar_resize,compression_factor=1):
-        nbs = [c_in, 16,64,64]
+        nbs = [c_in, 32,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False) 
                 for i in range(3)] 
 
@@ -68,7 +73,8 @@ class XResNet(nn.Sequential):
         layers = [Lambda(resize), *stem, maxpool, *res_layers]
         layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), nn.Linear(nbs[-1]*expansion, c_out) ])
         
-        resnet = cls(*layers)        
+        resnet = cls(*layers)       
+        init_cnn(resnet) 
         return resnet
 
     @staticmethod

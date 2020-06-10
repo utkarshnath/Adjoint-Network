@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
    if is_individual_training:
       loss_func = F.cross_entropy
-      cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      cbfs+=[SaveModelCallback('Individual'),AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       resnet = args.resnet
       if resnet==18:
          model = xresnet18(c_out=c,resize=data_resize)
