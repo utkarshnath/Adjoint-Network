@@ -1,22 +1,22 @@
 
 def get_default_config(dataset,ngpu=1):
     if dataset=='imagenet' and ngpu==1:
-       batch_size = 64
+       batch_size = 128
        image_size = 224
        lr = 1e-3
        c = 1000
        epoch = 60
        is_sgd = False
     elif dataset=='imagenet' and ngpu==4:
-       batch_size = 200
+       batch_size = 768
        image_size = 224
        lr = 4e-3
        c = 1000
-       epoch = 100
+       epoch = 60
        is_sgd = False
     elif dataset == 'imagewoof':
-       batch_size = 32
-       image_size = 32
+       batch_size = 128
+       image_size = 128
        lr = 1e-3
        c = 10
        epoch = 100

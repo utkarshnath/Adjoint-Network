@@ -83,6 +83,21 @@ def create_label_vocab(image_list):
             labels_vocab[name] = len(labels_vocab)
     return labels_vocab
 
+'''
+def create_label_vocab(image_list):
+    labels_vocab = {}
+    vocab_list = []
+    for path in image_list:
+        name = path_to_label_vocab(path)
+        if name not in labels_vocab:
+            vocab_list.append(name)
+    vocab_list.sort()
+    for i in range(len(vocab_list)):
+        name = vocab_list[i]
+        labels_vocab[name] = i
+    return labels_vocab
+'''
+
 class CuratedDataset(Dataset):
     def __init__(self, image_list, vocab=None):
         self.x = image_list
@@ -139,7 +154,7 @@ class Data():
     @property
     def train_dl(self): return DataLoader(self.train_ds, self.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=self.num_workers)
     @property
-    def valid_dl(self): return DataLoader(self.valid_ds, self.batch_size*2, shuffle=False, num_workers=self.num_workers)
+    def valid_dl(self): return DataLoader(self.valid_ds, 128, drop_last=True, shuffle=False, num_workers=self.num_workers)
 
 
 def make_rgb(item): return item.convert('RGB')

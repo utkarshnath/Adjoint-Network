@@ -78,7 +78,7 @@ def load_data(batch_size, image_size, dataset=1):
     elif dataset==2:
         path = datasets.untar_data(datasets.URLs.IMAGEWOOF_160)
     
-    train_transforms = [make_rgb,PilColor(l=0.6, u=1.4), RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float,transforms.Normalize(imagenet_stats[0],imagenet_stats[1])]
+    train_transforms = [make_rgb, PilColor(l=0.6, u=1.4), RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
     valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]    
 
     data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=8)

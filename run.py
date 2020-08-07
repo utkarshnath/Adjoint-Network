@@ -59,7 +59,7 @@ class Runner():
              
             self.handle("begin_batch")
             self.pred = self.learn.model(self.xb)
-            
+               
             self.handle("after_pred")                
             
             self.loss = self.learn.loss_func(self.pred,self.yb)

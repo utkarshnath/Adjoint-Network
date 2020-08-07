@@ -54,6 +54,10 @@ class ResBlock(nn.Module):
         self.pool = noop if s == 1 else nn.AvgPool2d(2,ceil_mode=True)
 
     def forward(self, x):
+        print('1',x.shape)
+        print('2',self.convs(x).shape)
+        print('3',self.pool(x).shape)
+        print('4',self.idconv(self.pool(x)).shape)
         return act_func(self.convs(x) + self.idconv(self.pool(x)))
 
 class XResNet(nn.Sequential):
