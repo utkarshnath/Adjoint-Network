@@ -46,7 +46,7 @@ def dataset_resize(image_size,x): return x.view(-1, 3, image_size, image_size)
 if __name__ == "__main__":
    start = time.time()
    device = torch.device('cuda',0)
-   torch.cuda.set_device(device)
+   # torch.cuda.set_device(device)
    if args.default_config=='True':
      batch_size, image_size, lr, c, epoch, is_sgd =  get_default_config(args.dataset)
    else:
@@ -91,13 +91,13 @@ if __name__ == "__main__":
    if is_sgd:
       lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
       lr_scheduler = ParamScheduler('lr', lr_sched,using_torch_optim=True)
-      cbfs = [lr_scheduler,CudaCallback()]
+      cbfs = [NormalizeCallback(device),lr_scheduler,CudaCallback()]
    else:
       lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
       beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
       lr_scheduler = ParamScheduler('lr', lr_sched)
       beta1_scheduler = ParamScheduler('beta1', beta1_sched)
-      cbfs = [lr_scheduler,beta1_scheduler,CudaCallback()]
+      cbfs = [NormalizeCallback(device),lr_scheduler,beta1_scheduler,CudaCallback(device)]
 
    if is_individual_training:
       loss_func = F.cross_entropy
@@ -132,6 +132,9 @@ if __name__ == "__main__":
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
       # if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model-stem3/combined8-50-sgd/{}.pt".format(last_epoch_done_idx))
+   
+   model = nn.DataParallel(model)
+   model = model.to(device)
 
    end = time.time()
    print("Loaded model", end-start)

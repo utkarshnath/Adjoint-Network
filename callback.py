@@ -53,11 +53,13 @@ def nll(out, yb):
     return nll1
 
 class CudaCallback(CallBacks):
+    def __init__(self,device):
+        self.device = device
 
     def begin_fit(self):
         self.model.cuda()
     
-    def begin_batch(self): self.run.xb,self.run.yb = self.xb.cuda(),self.yb.cuda()
+    def begin_batch(self): self.run.xb,self.run.yb = self.xb.to(self.device),self.yb.to(self.device)
 
 class lossScheduler(CallBacks):
     def after_epoch(self):
@@ -200,6 +202,16 @@ class SaveModelCallback(CallBacks):
     def after_epoch(self):
         curr_name = os.path.join(self.model_directory, str(self.epoch) + ".pt")
         torch.save(self.learn.model.state_dict(), curr_name) 
+
+class NormalizeCallback(CallBacks):
+    _order = 2
+    def __init__(self,device,oncuda=True):
+        self.mean = tensor([0.485, 0.456, 0.406])
+        self.std = tensor([0.229, 0.224, 0.225])
+        if oncuda: self.mean, self.std = self.mean.to(device), self.std.to(device)
+
+    def begin_batch(self): 
+        self.run.xb = (self.xb - self.mean[...,None,None]) / self.std[...,None,None]
 
 # Should run after stats callback
 class InferenceCallback(CallBacks):
