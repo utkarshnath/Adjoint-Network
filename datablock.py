@@ -77,7 +77,7 @@ class ImageList(ListManager):
 def path_to_label_vocab(path): return path.parent.name
 def create_label_vocab(image_list):
     labels_vocab = {}
-    for path in image_list:
+    for path in sorted(image_list):
         name = path_to_label_vocab(path)
         if name not in labels_vocab:
             labels_vocab[name] = len(labels_vocab)
