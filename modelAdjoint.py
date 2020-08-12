@@ -44,7 +44,6 @@ def conv(ni, no, ks, s=1, bias=False, expansion=4, compression_factor=4, masking
 
     return conv2dAdjoint(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer,compression_factor=compression_factor,masking_factor=masking_factor)
 
-
 def conv_layer(ni, no, ks, s, zero_bn=False, act=True, expansion=1, compression_factor=4, masking_factor=None):
     bn = batchNorm(no)
     nn.init.constant_(bn.bn1.weight, 0. if zero_bn else 1.)
@@ -52,6 +51,13 @@ def conv_layer(ni, no, ks, s, zero_bn=False, act=True, expansion=1, compression_
     layers = [conv(ni, no, ks=ks, s=s, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor), bn]
     if act: layers += [act_func]
     return nn.Sequential(*layers)
+
+def init_cnn(m):
+    if isinstance(m, (nn.Conv2d, nn.Linear)):
+       init.kaiming_normal_(m.weight, a=1.0)
+    if getattr(m, 'bias', None) is not None: init.constant_(m.bias, 0.)
+    for l in m.children(): init_cnn(l)
+
 
 class ResBlock(nn.Module):
     def __init__(self, ni, no, expansion, compression_factor, masking_factor, s=1):
@@ -91,7 +97,7 @@ class XResNet(nn.Sequential):
         layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), linear(nbs[-1]*expansion, c_out) ])
 
         resnet = cls(*layers)
-        #init_cnn(resnet)        
+        init_cnn(resnet)        
         return resnet
 
     @staticmethod
