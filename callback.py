@@ -57,7 +57,7 @@ class CudaCallback(CallBacks):
         self.device = device
 
     def begin_fit(self):
-        self.model.cuda()
+        self.model = self.model.cuda()
     
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.to(self.device),self.yb.to(self.device)
 
@@ -192,7 +192,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/model-stem3/"):
+    def __init__(self,name,save_dir="/scratch/un270/model/"):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):

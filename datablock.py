@@ -125,16 +125,16 @@ class Data():
         self.train_ds = CuratedDataset(train_list, vocab)
         self.valid_ds = CuratedDataset(valid_list, vocab)
 
-    @property
-    def train_path(self): return self.path/'train'
-    @property
-    def valid_path(self): return self.path/'val'
+    #@property
+    #def train_path(self): return self.path/'train'
+    #@property
+    #def valid_path(self): return self.path/'val'
 
 
-    #@property
-    #def train_path(self): return '/scratch/work/public/imagenet/train'
-    #@property
-    #def valid_path(self): return '/scratch/un270/val' 
+    @property
+    def train_path(self): return '/scratch/work/public/imagenet/train'
+    @property
+    def valid_path(self): return '/scratch/un270/val' 
 
     @property
     def train_dl(self): return DataLoader(self.train_ds, self.batch_size, shuffle=True, drop_last=True, pin_memory=True, num_workers=self.num_workers)

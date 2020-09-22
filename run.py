@@ -16,10 +16,10 @@ class DataBunch():
 
 
 class Learn():
-    def __init__(self, model, opt, loss_func, data,model_big=None):
+    def __init__(self, model, opt, loss_func, data, teacher_model=None):
         self.model, self.opt = model, opt 
         self.loss_func, self.data = loss_func, data
-        self.model_big = model_big
+        self.teacher_model = teacher_model
 
 
 class CancelTrainException(Exception): pass
@@ -43,9 +43,6 @@ class Runner():
     def model(self): return self.learn.model
 
     @property
-    def model_big(self): return self.learn.model_big
-
-    @property
     def loss_func(self): return self.learn.loss_func
 
     @property
@@ -59,10 +56,12 @@ class Runner():
              
             self.handle("begin_batch")
             self.pred = self.learn.model(self.xb)
-            
+            with torch.no_grad(): 
+                 self.teacher_pred = self.learn.teacher_model(self.xb)            
+        
             self.handle("after_pred")                
             
-            self.loss = self.learn.loss_func(self.pred,self.yb)
+            self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
             self.handle("after_loss")
             
             if not self.in_train: return 

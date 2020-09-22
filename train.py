@@ -70,9 +70,10 @@ if __name__ == "__main__":
 
    data_resize = partial(dataset_resize,image_size)
    is_individual_training = False if args.is_adjoint_training=='True' else True
-   last_epoch_done_idx = None
+   last_epoch_done_idx = 46
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
+   is_student_teacher = True
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -86,6 +87,7 @@ if __name__ == "__main__":
    print('compression_factor',compression_factor)
    print('masking_factor',masking_factor)
    print('resnet',args.resnet)
+   print('is_student_teacher',is_student_teacher)
    print('*****************************************')
 
    if is_sgd:
@@ -101,14 +103,14 @@ if __name__ == "__main__":
 
    if is_individual_training:
       loss_func = F.cross_entropy
-      cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      cbfs+=[SaveModelCallback('resnet50-ind4-student-teacher'),AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       resnet = args.resnet
       if resnet==18:
          model = xresnet18(c_out=c,resize=data_resize)
       elif resnet==34:
           model = xresnet34(c_out=c,resize=data_resize)
       elif resnet==50:
-          model = xresnet50(c_out=c,resize=data_resize)
+          model = xresnet50(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==101:
          model = xresnet101(c_out=c,resize=data_resize)
       elif resnet==152:
@@ -131,10 +133,17 @@ if __name__ == "__main__":
          model = xresnet_fast152(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
-      # if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model-stem3/combined8-50-sgd/{}.pt".format(last_epoch_done_idx))
+      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
    
-   model = nn.DataParallel(model)
-   model = model.to(device)
+   # model = nn.DataParallel(model)
+   # model = model.to(device)
+   
+   if is_student_teacher:
+      teacher_model = xresnet50(c_out=c,resize=data_resize)
+      #teacher_model = load_model(teacher_model, state_dict_file_path='/home/un270/indi98.pt')
+      teacher_model.cuda()
+      #model = load_model(model, state_dict_file_path='/scratch/un270/model/resnet50-ind4-student-teacher/46.pt')
+      loss_func = TeacherStudentLoss()
 
    end = time.time()
    print("Loaded model", end-start)
@@ -144,7 +153,7 @@ if __name__ == "__main__":
    else:
       opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
 
-   learn = Learn(model,opt,loss_func, data)
+   learn = Learn(model,opt,loss_func, data,teacher_model)
    
 
    run = Runner(learn,cbs = cbfs)

@@ -60,12 +60,11 @@ class XResNet(nn.Sequential):
 
     @classmethod
     def create(cls, expansion,  layers, c_in=3, c_out=10,resize=cifar_resize,compression_factor=1):
-        nbs = [c_in, 16,64,64]
+        nbs = [c_in, 32,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False) 
                 for i in range(3)] 
 
         maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
         nbs = [64//expansion, 64, 128//compression_factor, 256//compression_factor, 512//compression_factor]
         res_layers = [cls._make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l)
             for i,l in enumerate(layers) ]

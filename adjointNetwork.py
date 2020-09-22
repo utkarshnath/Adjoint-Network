@@ -92,4 +92,16 @@ class AdjointLoss(nn.Module):
         
         return nll1 + self.alpha * kl.mean()
 
+class TeacherStudentLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
 
+    def forward(self, teacher_output, student_output, target):
+        log_preds = F.log_softmax(student_output, dim=-1)
+        nll = F.nll_loss(log_preds, target)
+
+        prob1 = F.softmax(teacher_output, dim=-1)
+        prob2 = F.softmax(student_output, dim=-1)
+        kl = (prob1 * torch.log(1e-6 + prob1/(prob2+1e-6))).sum(1)
+
+        return nll +  kl.mean()

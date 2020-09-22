@@ -83,7 +83,7 @@ class XResNet(nn.Sequential):
 
     @classmethod
     def create(cls, expansion,  layers, c_in=3, c_out=10, resize=cifar_resize, compression_factor=4, masking_factor=None):
-        nbs = [c_in, 16,64,64]
+        nbs = [c_in, 32,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False,expansion=expansion)
                 for i in range(3)]
 
