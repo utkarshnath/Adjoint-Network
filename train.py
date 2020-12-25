@@ -70,10 +70,10 @@ if __name__ == "__main__":
 
    data_resize = partial(dataset_resize,image_size)
    is_individual_training = False if args.is_adjoint_training=='True' else True
-   last_epoch_done_idx = 46
+   last_epoch_done_idx = None
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
-   is_student_teacher = True
+   is_student_teacher = False
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -103,20 +103,21 @@ if __name__ == "__main__":
 
    if is_individual_training:
       loss_func = F.cross_entropy
-      cbfs+=[SaveModelCallback('resnet50-ind4-student-teacher'),AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
+      cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       resnet = args.resnet
       if resnet==18:
-         model = xresnet18(c_out=c,resize=data_resize)
+         model = xresnet18(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==34:
-          model = xresnet34(c_out=c,resize=data_resize)
+          model = xresnet34(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==50:
           model = xresnet50(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==101:
-         model = xresnet101(c_out=c,resize=data_resize)
+         model = xresnet101(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==152:
-          model = xresnet152(c_out=c,resize=data_resize)
+          model = xresnet152(c_out=c,resize=data_resize,compression_factor=compression_factor)
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
+      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/resnet50-ind4-imagenet/{}.pt".format(last_epoch_done_idx))
    else:
       loss_func = AdjointLoss(0)
       cbfs+=[lossScheduler(),AvgStatsCallback()]
@@ -138,11 +139,11 @@ if __name__ == "__main__":
    # model = nn.DataParallel(model)
    # model = model.to(device)
    
+   teacher_model = None
    if is_student_teacher:
-      teacher_model = xresnet50(c_out=c,resize=data_resize)
-      #teacher_model = load_model(teacher_model, state_dict_file_path='/home/un270/indi98.pt')
+      teacher_model = xresnet18(c_out=c,resize=data_resize)
+      teacher_model = load_model(teacher_model, state_dict_file_path='/scratch/un270/model/{}-individual-18/{}.pt'.format(args.dataset,epoch-1))
       teacher_model.cuda()
-      #model = load_model(model, state_dict_file_path='/scratch/un270/model/resnet50-ind4-student-teacher/46.pt')
       loss_func = TeacherStudentLoss()
 
    end = time.time()

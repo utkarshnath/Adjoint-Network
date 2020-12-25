@@ -81,13 +81,13 @@ def load_data(batch_size, image_size, dataset=1):
     train_transforms = [make_rgb, RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
     valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]    
 
-    data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=1)
+    data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=8)
     print("Loaded data")
     return data
 
 def load_fastai_data(batch_size, image_size):
-    path = untar_data(URLs.PETS)
-    path_img = path/'images'
+    #path = untar_data(URLs.PETS)
+    path_img = '/scratch/un270/oxford-iiit-pet/images'
     fnames = get_image_files(path_img)
     pat = r'/([^/]+)_\d+.jpg$'
     data = ImageDataBunch.from_name_re(path_img, fnames, pat, ds_tfms=get_transforms(), size=image_size, bs=batch_size).normalize(imagenet_stats)

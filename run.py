@@ -55,13 +55,18 @@ class Runner():
             self.args = args
              
             self.handle("begin_batch")
-            self.pred = self.learn.model(self.xb)
-            with torch.no_grad(): 
-                 self.teacher_pred = self.learn.teacher_model(self.xb)            
+            if self.learn.teacher_model == None:
+               self.pred = self.learn.model(self.xb)
+            else:
+               with torch.no_grad(): 
+                    self.teacher_pred = self.learn.teacher_model(self.xb)            
         
             self.handle("after_pred")                
             
-            self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
+            if self.learn.teacher_model == None:
+               self.loss = self.learn.loss_func(self.pred,self.yb)
+            else:
+               self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
             self.handle("after_loss")
             
             if not self.in_train: return 
