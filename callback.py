@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import os
-from adjointNetwork import *
+from adjointNetworkNAS import *
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
 

@@ -12,9 +12,9 @@ from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos
 from myconv import myconv2d
 from model import xresnet18,xresnet50,xresnet101
-from modelAdjoint import xresnet_fast18,xresnet_fast50,xresnet_fast101
+from modelNAS import xresnet_fast18,xresnet_fast50,xresnet_fast101
 import time
-from adjointNetwork import *
+from adjointNetworkNAS import *
 from optimizers import *
 import argparse
 from config import *

@@ -56,7 +56,7 @@ class Runner():
              
             self.handle("begin_batch")
             if self.learn.teacher_model == None:
-               self.pred = self.learn.model(self.xb)
+               self.pred, self.latency = self.learn.model(self.xb, self.epoch/(self.epochs+1))
             else:
                with torch.no_grad(): 
                     self.teacher_pred = self.learn.teacher_model(self.xb)            
@@ -64,7 +64,7 @@ class Runner():
             self.handle("after_pred")                
             
             if self.learn.teacher_model == None:
-               self.loss = self.learn.loss_func(self.pred,self.yb)
+               self.loss = self.learn.loss_func(self.pred,self.yb,self.latency)
             else:
                self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
             self.handle("after_loss")
