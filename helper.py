@@ -57,9 +57,11 @@ def get_data_bunch(batch_size):
 
 def load_cifar_data(batch_size, image_size,size):
     if size==10:
-       path = datasets.untar_data(URLs.CIFAR)
+       #path = datasets.untar_data(URLs.CIFAR)
+       path = '/scratch/un270/.fastai/data/cifar10/'
     else:
-       path = datasets.untar_data(URLs.CIFAR_100)
+       #path = datasets.untar_data(URLs.CIFAR_100)
+       path = '/scratch/un270/.fastai/data/cifar100/'
     stats = (np.array([ 0.4914 ,  0.48216,  0.44653]), np.array([ 0.24703,  0.24349,  0.26159]))
     
     tfms = (get_transforms(do_flip=True,flip_vert=False,max_rotate=25))
