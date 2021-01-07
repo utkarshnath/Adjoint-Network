@@ -39,6 +39,11 @@ def load_model(model, state_dict_file_path=None):
         model.load_state_dict(torch.load(state_dict_file_path))
     return model
 
+def load_searched_model(model, path):
+    state_dict = torch.load(path)
+    for k,v in state_dict.items():
+        if(k.find("gumbel")!=-1):
+           model.state_dict()[k].copy_(v)
 
 def dataset_resize(image_size,x): return x.view(-1, 3, image_size, image_size)
 
@@ -74,6 +79,7 @@ if __name__ == "__main__":
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
+   architecture_search = False
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -88,6 +94,7 @@ if __name__ == "__main__":
    print('masking_factor',masking_factor)
    print('resnet',args.resnet)
    print('is_student_teacher',is_student_teacher)
+   print('architecture_search', architecture_search)
    print('*****************************************')
 
    if is_sgd:
@@ -119,26 +126,31 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/resnet50-ind4-imagenet/{}.pt".format(last_epoch_done_idx))
    else:
-      loss_func = AdjointLoss(0)
-      cbfs+=[lossScheduler(),AvgStatsCallback()]
+      loss_func = AdjointLoss(1) if architecture_search else  AdjointLoss()
+      cbfs+=[AvgStatsCallback()]
       resnet = args.resnet
       if resnet==18:
-         model = xresnet_fast18(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = xresnet_fast18(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==34:
-         model = xresnet_fast34(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = xresnet_fast34(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==50:
-         model = xresnet_fast50(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = xresnet_fast50(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==101:
-         model = xresnet_fast101(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = xresnet_fast101(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==152:
-         model = xresnet_fast152(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = xresnet_fast152(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
-   
+  
+   #cbfs+=[SaveModelCallback('cifar-4-8-16-noschedular-1e-11-sq-no-stem')]
    # model = nn.DataParallel(model)
    # model = model.to(device)
    
+   if architecture_search == False:
+       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/1e-7/cifar-4-8-16-32-noschedular-1e-11-sq/148.pt")
+       cbfs += [lossScheduler()]
+
    teacher_model = None
    if is_student_teacher:
       teacher_model = xresnet18(c_out=c,resize=data_resize)
@@ -154,7 +166,7 @@ if __name__ == "__main__":
    else:
       opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
 
-   learn = Learn(model,opt,loss_func, data,teacher_model)
+   learn = Learn(model,opt,loss_func, data,teacher_model,architecture_search)
    
 
    run = Runner(learn,cbs = cbfs)

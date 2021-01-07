@@ -6,6 +6,7 @@ import math
 import torch.nn.functional as F
 import time
 from mask import *
+import torch.distributions.gumbel as gumbel
 
 def test(a,b,cmp,cname=None):
     if cname is None: cname=cmp.__name__
@@ -13,6 +14,22 @@ def test(a,b,cmp,cname=None):
 
 def near(a,b): return torch.allclose(a, b, rtol=1e-3, atol=1e-5)
 def test_near(a,b): test(a,b,near)
+
+def sample_gumbel(shape, eps=1e-20):
+    U = torch.rand(shape).cuda()
+    return -torch.log(-torch.log(U + eps) + eps)
+
+
+def gumbel_softmax(logits, gumbel_noise, temperature, hard=False):
+    y = logits + gumbel_noise
+    y = F.softmax(y / temperature, dim=-1)
+    if not hard:
+       return y
+    else:
+      idx = torch.argmax(y)
+      y_hard = torch.zeros_like(y).cuda()
+      y_hard.scatter_(0, idx, 1)
+      return y_hard
 
 class conv2dFirstLayer(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,padding,stride,*kargs,**kwargs):
@@ -26,42 +43,63 @@ class conv2dFirstLayer(nn.Conv2d):
         return concatinatedTensor, latency
 
 class conv2dAdjoint(nn.Conv2d):
-    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer,compression_factor=1,masking_factor=None,*kargs,**kwargs):
+    def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer, architecture_search=False, compression_factor=1,masking_factor=None,*kargs,**kwargs):
         super(conv2dAdjoint, self).__init__(in_channels,out_channels,kernel_size,padding,stride,*kargs, **kwargs)
-        self.gumbel_weight = Parameter(torch.Tensor(3))
+        self.gumbel_weight = Parameter(torch.rand(4))
+        self.gumbel_noise = Parameter(sample_gumbel(self.gumbel_weight.size()))
+        self.gumbel_noise.requires_grad = False
         self.padding = (padding,padding)
         self.stride = (stride,stride)
         self.mask_layer = mask_layer
         self.out_channels = out_channels
         self.compression_factor = compression_factor
+        self.architecture_search = architecture_search
         if masking_factor!=None:
            self.mask = randomShape(kernel_size,kernel_size,masking_factor)
         else:
           self.mask = 1
-        self.isFirst = True
+        if not self.architecture_search:
+            self.gumbel_weight.requires_grad = False
 
     def forward(self,input, epoch=None, latency=0):
         l,_,_,_ = input.shape
-        g_weight = F.gumbel_softmax(self.gumbel_weight, tau=1-epoch, hard=False)
+        if self.architecture_search:
+            g_weight = gumbel_softmax(self.gumbel_weight, self.gumbel_noise, 5*((0.956)**epoch), False)
+        else:
+            g_weight = gumbel_softmax(self.gumbel_weight, self.gumbel_noise, 0.01, True)
+        
+        #g_weight = F.gumbel_softmax(self.gumbel_weight, 5*((0.956)**epoch), False)
         a = F.conv2d(input[:l//2],self.weight,self.bias,self.stride,self.padding)
-
+        
         if self.mask_layer:
            b = F.conv2d(input[l//2:],self.weight*self.mask,self.bias,self.stride,self.padding)
-           
-           b1 = torch.clone(b)
-           b1[:,self.out_channels//2:] = 0
-           b1 = b1*g_weight[0]
             
+           b1 = torch.clone(b)
+           b1[:,self.out_channels//4:] = 0
+           b1 = b1*g_weight[0]
+           
            b2 = torch.clone(b)
-           b2[:,self.out_channels//4:] = 0
+           b2[:,self.out_channels//8:] = 0
            b2 = b2*g_weight[1]
-
+ 
            b3 = torch.clone(b)
-           b3[:,self.out_channels//8:] = 0
+           b3[:,self.out_channels//16:] = 0
            b3 = b3*g_weight[2]
 
-           latency += ((self.out_channels//2)*g_weight[0] + (self.out_channels//4)*g_weight[1] + (self.out_channels//8)*g_weight[2])
-           concatinatedTensor = torch.cat([a, b1+b2+b3], dim=0)
+           b4 = torch.clone(b)
+           b4[:,self.out_channels//32:] = 0
+           b4 = b4*g_weight[3]
+
+           #b5 = torch.clone(b)
+           #b5[:,self.out_channels//64:] = 0
+           #b5 = b5*g_weight[4]
+
+           latency += (((self.out_channels//4)**2)*g_weight[0] +
+                       ((self.out_channels//8)**2)*g_weight[1] +
+                       ((self.out_channels//16)**2)*g_weight[2] +
+                       ((self.out_channels//32)**2)*g_weight[3])
+                       #((self.out_channels//64)**2)*g_weight[4])
+           concatinatedTensor = torch.cat([a, b1+b2+b3+b4], dim=0)
         else:
            concatinatedTensor = torch.cat([a, a], dim=0)
 
@@ -96,9 +134,9 @@ class AdjointLoss(nn.Module):
     def __init__(self,alpha=1):
         super().__init__()
         self.alpha = alpha
-        self.gamma = 1e-6
+        self.gamma = 1e-11
 
-    def forward(self, output, target, latency):
+    def forward(self, output, target, latency, architecture_search):
         l,_ = output.shape
         log_preds1 = F.log_softmax(output[:l//2], dim=-1)
         nll1 = F.nll_loss(log_preds1, target)
@@ -106,8 +144,11 @@ class AdjointLoss(nn.Module):
         prob1 = F.softmax(output[:l//2], dim=-1)
         prob2 = F.softmax(output[l//2:], dim=-1)
         kl = (prob1 * torch.log(1e-6 + prob1/(prob2+1e-6))).sum(1)
-        
-        return nll1 + self.alpha * kl.mean() + self.gamma * latency
+        #print(nll1,self.alpha * kl.mean(), self.gamma * latency)
+        if architecture_search:
+            return nll1 + self.alpha * kl.mean() + self.gamma * latency
+        else:
+            return nll1 + self.alpha * kl.mean()
 
 class TeacherStudentLoss(nn.Module):
     def __init__(self):

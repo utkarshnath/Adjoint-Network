@@ -36,7 +36,7 @@ act_func = Relu()
 
 first = True
 
-def conv(ni, no, ks, s=1, bias=False, expansion=4, compression_factor=4, masking_factor=None):
+def conv(ni, no, ks, s=1, bias=False, expansion=4, architecture_search=False, compression_factor=4, masking_factor=None):
     if expansion==1:
        # resnet 18
        if no>64:
@@ -49,27 +49,27 @@ def conv(ni, no, ks, s=1, bias=False, expansion=4, compression_factor=4, masking
           mask_layer = True
        else:
           mask_layer = False
-
+    
     global first
     if first:
         first = False
         return conv2dFirstLayer(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)
 
-    return conv2dAdjoint(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer,compression_factor=compression_factor,masking_factor=masking_factor)
+    return conv2dAdjoint(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias,mask_layer=mask_layer, architecture_search=architecture_search, compression_factor=compression_factor,masking_factor=masking_factor)
 
-def conv_layer(ni, no, ks, s, zero_bn=False, act=True, expansion=1, compression_factor=4, masking_factor=None):
+def conv_layer(ni, no, ks, s, zero_bn=False, act=True, expansion=1, architecture_search=False, compression_factor=4, masking_factor=None):
     bn = batchNorm(no)
     nn.init.constant_(bn.bn1.weight, 0. if zero_bn else 1.)
     nn.init.constant_(bn.bn2.weight, 0. if zero_bn else 1.)
-    layers = [conv(ni, no, ks=ks, s=s, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor), bn]
+    layers = [conv(ni, no, ks=ks, s=s, expansion=expansion, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor), bn]
     if act: layers += [act_func]
     return mySequential(*layers)
 
-def conv_layer_stem(ni, no, ks, s, zero_bn=False, act=True, expansion=1, compression_factor=4, masking_factor=None):
+def conv_layer_stem(ni, no, ks, s, zero_bn=False, act=True, expansion=1, architecture_search=False, compression_factor=4, masking_factor=None):
     bn = batchNorm(no)
     nn.init.constant_(bn.bn1.weight, 0. if zero_bn else 1.)
     nn.init.constant_(bn.bn2.weight, 0. if zero_bn else 1.)
-    layers = [conv(ni, no, ks=ks, s=s, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor), bn]
+    layers = [conv(ni, no, ks=ks, s=s, expansion=expansion, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor), bn]
     if act: layers += [act_func]
     return nn.Sequential(*layers)
 
@@ -81,20 +81,20 @@ def init_cnn(m):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, ni, no, expansion, compression_factor, masking_factor, s=1):
+    def __init__(self, ni, no, expansion, architecture_search, compression_factor, masking_factor, s=1):
         super().__init__()
         #print('Res ni ',ni,'no ',no)
         
         ni *= expansion
-        layers = [conv_layer(ni, no, 3, s, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor),
-                  conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor)
+        layers = [conv_layer(ni, no, 3, s, expansion=expansion, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor),
+                  conv_layer(no, no*expansion, 3, 1, zero_bn=True, act=False, expansion=expansion, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
         ] if expansion == 1 else [
-            conv_layer(ni, no, 1, 1, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor),
-            conv_layer(no, no, 3, s, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor),
-            conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor)
+            conv_layer(ni, no, 1, 1, expansion=expansion, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor),
+            conv_layer(no, no, 3, s, expansion=expansion, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor),
+            conv_layer(no, no*expansion, 1, 1, zero_bn=True, act=False, expansion=expansion, architecture_search=architecture_search,  compression_factor=compression_factor, masking_factor=masking_factor)
         ]
         self.convs = mySequential(*layers)
-        self.idconv = noop if ni == no*expansion else conv_layer(ni, no*expansion, 1, 1, act=False, expansion=expansion, compression_factor=compression_factor, masking_factor=masking_factor)
+        self.idconv = noop if ni == no*expansion else conv_layer(ni, no*expansion, 1, 1, act=False, expansion=expansion, architecture_search=architecture_search,  compression_factor=compression_factor, masking_factor=masking_factor)
         self.pool = noop1 if s == 1 else nn.AvgPool2d(2,ceil_mode=True)
         
 
@@ -103,33 +103,6 @@ class ResBlock(nn.Module):
         idconv = self.idconv(self.pool(x), epoch, latency)
         return act_func(conv[0]+idconv[0])[0], conv[1]+idconv[1]
 
-'''
-class XResNet(nn.Sequential):
-
-    @classmethod
-    def create(cls, expansion,  layers, c_in=3, c_out=10, resize=cifar_resize, compression_factor=4, masking_factor=None):
-        nbs = [c_in, 32,64,64]
-        stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False,expansion=expansion)
-                for i in range(3)]
-
-        maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        nbs = [64//expansion, 64, 128, 256, 512]
-        res_layers = [cls._make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l,compression_factor,masking_factor)
-            for i,l in enumerate(layers) ]
-
-        layers = [Lambda(resize), *stem, maxpool, *res_layers]
-        layers.extend([nn.AdaptiveAvgPool2d(1), Flatten(), linear(nbs[-1]*expansion, c_out) ])
-
-        resnet = cls(*layers)
-        init_cnn(resnet)
-        return resnet
-
-    @staticmethod
-    def _make_layer(ni, no, expansion, s, number_block,compression_factor,masking_factor):
-        return nn.Sequential(*[ResBlock(ni if i==0 else no, no, expansion, compression_factor, masking_factor,s=s if i==0 else 1)
-            for i in range(number_block)] )
-'''
 
 class mySequential(nn.Sequential):
     def forward(self, input, epoch, latency):
@@ -137,13 +110,13 @@ class mySequential(nn.Sequential):
             input, latency = module(input, epoch, latency)
         return input, latency
 
-def make_layer(ni, no, expansion, s, number_block,compression_factor,masking_factor):
-        return mySequential(*[ResBlock(ni if i==0 else no, no, expansion, compression_factor, masking_factor,s=s if i==0 else 1)
+def make_layer(ni, no, expansion, s, number_block, architecture_search, compression_factor, masking_factor):
+        return mySequential(*[ResBlock(ni if i==0 else no, no, expansion,architecture_search, compression_factor, masking_factor,s=s if i==0 else 1)
             for i in range(number_block)] )
 
 
 class XResNet(nn.Module):
-    def __init__(self, expansion,  layers, c_in=3, c_out=10, resize=cifar_resize, compression_factor=4, masking_factor=None):
+    def __init__(self, expansion,  layers, c_in=3, c_out=10, resize=cifar_resize, architecture_search=False, compression_factor=4, masking_factor=None):
         super().__init__()
         nbs = [c_in, 32,64,64]
         stem = [conv_layer(nbs[i], nbs[i+1], 3, 2 if i==0 else 1,False,expansion=expansion)
@@ -152,7 +125,7 @@ class XResNet(nn.Module):
         maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         nbs = [64//expansion, 64, 128, 256, 512]
 
-        res_layers = [make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l,compression_factor,masking_factor)
+        res_layers = [make_layer(nbs[i], nbs[i+1], expansion, 1 if i==0 else 2, l, architecture_search, compression_factor,masking_factor)
             for i,l in enumerate(layers) ]
 
         self.resize = Lambda(resize)
@@ -170,7 +143,6 @@ class XResNet(nn.Module):
         x = self.resize(x)
         x, latency = self.stem(x, epoch, 0)
         x = self.pool(x)
-        #x = self.initial_layers(x)
         x, latency = self.res_layers(x, epoch, 0)
         x = self.final_layers(x)
         return x, latency

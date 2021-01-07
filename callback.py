@@ -192,7 +192,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/model/"):
+    def __init__(self,name,save_dir="/scratch/un270/model/Adjoint-Experiments/Nas/sq_latency/"):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):

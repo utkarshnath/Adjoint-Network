@@ -16,10 +16,11 @@ class DataBunch():
 
 
 class Learn():
-    def __init__(self, model, opt, loss_func, data, teacher_model=None):
+    def __init__(self, model, opt, loss_func, data, teacher_model=None, architecture_search=False):
         self.model, self.opt = model, opt 
         self.loss_func, self.data = loss_func, data
         self.teacher_model = teacher_model
+        self.architecture_search = architecture_search
 
 
 class CancelTrainException(Exception): pass
@@ -56,7 +57,7 @@ class Runner():
              
             self.handle("begin_batch")
             if self.learn.teacher_model == None:
-               self.pred, self.latency = self.learn.model(self.xb, self.epoch/(self.epochs+1))
+               self.pred, self.latency = self.learn.model(self.xb, self.epoch)
             else:
                with torch.no_grad(): 
                     self.teacher_pred = self.learn.teacher_model(self.xb)            
@@ -64,7 +65,7 @@ class Runner():
             self.handle("after_pred")                
             
             if self.learn.teacher_model == None:
-               self.loss = self.learn.loss_func(self.pred,self.yb,self.latency)
+               self.loss = self.learn.loss_func(self.pred,self.yb,self.latency, self.learn.architecture_search)
             else:
                self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
             self.handle("after_loss")
