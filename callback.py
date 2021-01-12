@@ -6,6 +6,7 @@ import os
 from adjointNetworkNAS import *
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
+import numpy as np
 
 class CallBacks():
     _order = 0
@@ -64,7 +65,8 @@ class CudaCallback(CallBacks):
 class lossScheduler(CallBacks):
     def after_epoch(self):
         x = self.epoch/self.epochs
-        self.learn.loss_func = AdjointLoss(min(4*(x**2),1))
+        self.learn.loss_func = AdjointLoss(np.e**x - 1)
+        #self.learn.loss_func = AdjointLoss(min(4*(x**2),1))
            
            
                          
@@ -192,7 +194,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/model/Adjoint-Experiments/Nas/sq_latency/"):
+    def __init__(self,name,save_dir="/scratch/un270/model/Adjoint-Experiments/Nas/4-8-16-32-64/"):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):

@@ -38,5 +38,5 @@ def printModel(path):
 
 
 if __name__ == "__main__":
-   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/1e-7/cifar-4-8-16-32-noschedular-1e-10-sq/50.pt')
+   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/4-8-16-32/newlat-t15-schedular-1e-11/144.pt')
    print(compression_list)

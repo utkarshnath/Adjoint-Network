@@ -37,10 +37,10 @@ class conv2dFirstLayer(nn.Conv2d):
         self.padding = (padding,padding)
         self.stride = (stride,stride)
 
-    def forward(self,input, epoch=None, latency=0):
+    def forward(self,input, epoch=None, latency=0, prev_g_weight=0):
         a = F.conv2d(input,self.weight,self.bias,self.stride,self.padding,self.dilation, self.groups)
         concatinatedTensor = torch.cat([a, a], dim=0)
-        return concatinatedTensor, latency
+        return concatinatedTensor, latency, prev_g_weight
 
 class conv2dAdjoint(nn.Conv2d):
     def __init__(self,in_channels,out_channels,kernel_size,padding,stride,mask_layer, architecture_search=False, compression_factor=1,masking_factor=None,*kargs,**kwargs):
@@ -61,10 +61,10 @@ class conv2dAdjoint(nn.Conv2d):
         if not self.architecture_search:
             self.gumbel_weight.requires_grad = False
 
-    def forward(self,input, epoch=None, latency=0):
+    def forward(self,input, epoch=None, latency=0, prev_g_weight=0):
         l,_,_,_ = input.shape
         if self.architecture_search:
-            g_weight = gumbel_softmax(self.gumbel_weight, self.gumbel_noise, 5*((0.956)**epoch), False)
+            g_weight = gumbel_softmax(self.gumbel_weight, self.gumbel_noise, 15*((0.956)**epoch), False)
         else:
             g_weight = gumbel_softmax(self.gumbel_weight, self.gumbel_noise, 0.01, True)
         
@@ -94,16 +94,33 @@ class conv2dAdjoint(nn.Conv2d):
            #b5[:,self.out_channels//64:] = 0
            #b5 = b5*g_weight[4]
 
-           latency += (((self.out_channels//4)**2)*g_weight[0] +
-                       ((self.out_channels//8)**2)*g_weight[1] +
-                       ((self.out_channels//16)**2)*g_weight[2] +
-                       ((self.out_channels//32)**2)*g_weight[3])
-                       #((self.out_channels//64)**2)*g_weight[4])
+           if type(prev_g_weight)==int:
+              c_in = self.weight.shape[1]
+           else:
+              c_in = ((self.weight.shape[1]//4)*prev_g_weight[0] + 
+                     (self.weight.shape[1]//8)*prev_g_weight[1] + 
+                     (self.weight.shape[1]//16)*prev_g_weight[2] + 
+                     (self.weight.shape[1]//32)*prev_g_weight[3])
+                     #(self.weight.shape[1]//64)*prev_g_weight[4]) 
+           
+           h = input.shape[2]
+           w = input.shape[3]
+           k = self.weight.shape[2]
+
+           c_out = (((self.out_channels//4)**1)*g_weight[0] +
+                    ((self.out_channels//8)**1)*g_weight[1] +
+                    ((self.out_channels//16)**1)*g_weight[2] +
+                    ((self.out_channels//32)**1)*g_weight[3])
+                    #((self.out_channels//64)**1)*g_weight[4])
+
+           latency += (k * k * h * w * c_in * c_out)
+
            concatinatedTensor = torch.cat([a, b1+b2+b3+b4], dim=0)
+           return concatinatedTensor, latency, g_weight
         else:
            concatinatedTensor = torch.cat([a, a], dim=0)
-
-        return concatinatedTensor, latency
+           
+        return concatinatedTensor, latency, 0
         
 class batchNorm(nn.Module):
     def __init__(self,num_features,*kargs,**kwargs):
@@ -112,12 +129,12 @@ class batchNorm(nn.Module):
         self.bn1 = nn.BatchNorm2d(num_features)
         self.bn2 = nn.BatchNorm2d(num_features)
 
-    def forward(self,input, epoch=None, latency=0):
+    def forward(self,input, epoch=None, latency=0, prev_g_weight=0):
         l,_,_,_ = input.shape
         a = self.bn1(input[:l//2])
         d = self.bn2(input[l//2:])
         concatinatedTensor = torch.cat([a, d], dim=0)
-        return concatinatedTensor, latency
+        return concatinatedTensor, latency, prev_g_weight
 
 class linear(nn.Linear):
     def __init__(self,in_features, out_features, parts=4, bias=True,*kargs,**kwargs):
@@ -134,7 +151,7 @@ class AdjointLoss(nn.Module):
     def __init__(self,alpha=1):
         super().__init__()
         self.alpha = alpha
-        self.gamma = 1e-11
+        self.gamma = 1e-13
 
     def forward(self, output, target, latency, architecture_search):
         l,_ = output.shape
@@ -144,9 +161,9 @@ class AdjointLoss(nn.Module):
         prob1 = F.softmax(output[:l//2], dim=-1)
         prob2 = F.softmax(output[l//2:], dim=-1)
         kl = (prob1 * torch.log(1e-6 + prob1/(prob2+1e-6))).sum(1)
-        #print(nll1,self.alpha * kl.mean(), self.gamma * latency)
+        # print(nll1, kl.mean(), self.gamma * latency)
         if architecture_search:
-            return nll1 + self.alpha * kl.mean() + self.gamma * latency
+            return nll1 + self.alpha * (kl.mean() + self.gamma * latency)
         else:
             return nll1 + self.alpha * kl.mean()
 

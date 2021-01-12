@@ -14,7 +14,7 @@ class Lambda(nn.Module):
 def mnist_resize(x): return x.view(-1, 1, 28, 28)
 def cifar_resize(x): return x.view(-1, 3, 32, 32)
 def imagenet_resize(x): return x.view(-1, 3, 128, 128)
-def noop(x, t=0, latency=0): return x, latency
+def noop(x, t=0, latency=0, prev_g_weight=0): return x, latency, prev_g_weight
 def noop1(x): return x 
 
 class Flatten(nn.Module):
@@ -26,11 +26,11 @@ class Relu(nn.Module):
         super().__init__()
         self.relu = nn.ReLU()
   
-    def forward(self,x, t=0, latency=0):
+    def forward(self,x, t=0, latency=0, prev_g_weight=0):
         if type(x)==tuple:
            print('yes')
            return self.relu(x[0]), latency
-        return self.relu(x),latency
+        return self.relu(x),latency, prev_g_weight
 
 act_func = Relu()
 
@@ -98,17 +98,17 @@ class ResBlock(nn.Module):
         self.pool = noop1 if s == 1 else nn.AvgPool2d(2,ceil_mode=True)
         
 
-    def forward(self, x, epoch, latency):
-        conv = self.convs(x, epoch, latency)
-        idconv = self.idconv(self.pool(x), epoch, latency)
-        return act_func(conv[0]+idconv[0])[0], conv[1]+idconv[1]
+    def forward(self, x, epoch, latency, prev_g_weight):
+        conv = self.convs(x, epoch, latency, prev_g_weight)
+        idconv = self.idconv(self.pool(x), epoch, latency, prev_g_weight)
+        return act_func(conv[0]+idconv[0])[0], conv[1]+idconv[1], conv[2]
 
 
 class mySequential(nn.Sequential):
-    def forward(self, input, epoch, latency):
+    def forward(self, input, epoch, latency, prev_g_weight):
         for module in self._modules.values():
-            input, latency = module(input, epoch, latency)
-        return input, latency
+            input, latency, prev_g_weight = module(input, epoch, latency, prev_g_weight)
+        return input, latency, prev_g_weight
 
 def make_layer(ni, no, expansion, s, number_block, architecture_search, compression_factor, masking_factor):
         return mySequential(*[ResBlock(ni if i==0 else no, no, expansion,architecture_search, compression_factor, masking_factor,s=s if i==0 else 1)
@@ -141,9 +141,9 @@ class XResNet(nn.Module):
 
     def forward(self, x, epoch):
         x = self.resize(x)
-        x, latency = self.stem(x, epoch, 0)
+        x, latency, prev_g_weight = self.stem(x, epoch, 0, 0)
         x = self.pool(x)
-        x, latency = self.res_layers(x, epoch, 0)
+        x, latency, prev_g_weight = self.res_layers(x, epoch, 0, 0)
         x = self.final_layers(x)
         return x, latency
 

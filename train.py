@@ -126,7 +126,7 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/resnet50-ind4-imagenet/{}.pt".format(last_epoch_done_idx))
    else:
-      loss_func = AdjointLoss(1) if architecture_search else  AdjointLoss()
+      loss_func = AdjointLoss(1) if architecture_search else  AdjointLoss(0)
       cbfs+=[AvgStatsCallback()]
       resnet = args.resnet
       if resnet==18:
@@ -143,13 +143,17 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
   
-   #cbfs+=[SaveModelCallback('cifar-4-8-16-noschedular-1e-11-sq-no-stem')]
+   #cbfs+=[SaveModelCallback('newlat-t15-schedular-1e-13')]
    # model = nn.DataParallel(model)
    # model = model.to(device)
    
    if architecture_search == False:
-       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/1e-7/cifar-4-8-16-32-noschedular-1e-11-sq/148.pt")
+       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/4-8-16-32/newlat-t15-noschedular-1e-13/145.pt")
        cbfs += [lossScheduler()]
+
+   #type 1,2
+   #loss_func = AdjointLoss(0)
+   #cbfs += [lossScheduler()]
 
    teacher_model = None
    if is_student_teacher:
