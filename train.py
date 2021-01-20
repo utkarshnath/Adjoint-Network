@@ -12,7 +12,7 @@ from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos
 from myconv import myconv2d
 from model import xresnet18,xresnet50,xresnet101
-from modelNAS import xresnet_fast18,xresnet_fast50,xresnet_fast101
+from modelNAS import xresnet_fast18,xresnet_fast50,xresnet_fast50X2,xresnet_fast101
 import time
 from adjointNetworkNAS import *
 from optimizers import *
@@ -79,7 +79,7 @@ if __name__ == "__main__":
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
-   architecture_search = False
+   architecture_search = True
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -135,6 +135,8 @@ if __name__ == "__main__":
          model = xresnet_fast34(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==50:
          model = xresnet_fast50(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==250:
+         model = xresnet_fast50X2(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==101:
          model = xresnet_fast101(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==152:
@@ -149,7 +151,10 @@ if __name__ == "__main__":
    
    if architecture_search == False:
        load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/4-8-16-32/newlat-t15-noschedular-1e-13/145.pt")
-       cbfs += [lossScheduler()]
+   else:
+       cbfs+=[SaveModelCallback('search_cifar24816')]
+
+   cbfs += [lossScheduler()]
 
    #type 1,2
    #loss_func = AdjointLoss(0)

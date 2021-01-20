@@ -151,6 +151,7 @@ class XResNet(nn.Module):
 def xresnet_fast18 (**kwargs):return XResNet(1, [2, 2,  2, 2], **kwargs)
 def xresnet_fast34 (**kwargs): return XResNet(1, [3, 4,  6, 3], **kwargs)
 def xresnet_fast50 (**kwargs): return XResNet(4, [3, 4,  6, 3], **kwargs)
+def xresnet_fast50X2 (**kwargs): return XResNet(4, [6, 8,  12, 6], **kwargs)
 def xresnet_fast101(**kwargs): return XResNet(4, [3, 4, 23, 3], **kwargs)
 def resnet_fast152(**kwargs): return XResNet(4, [3, 8, 36, 3], **kwargs)
 
