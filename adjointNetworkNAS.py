@@ -75,19 +75,19 @@ class conv2dAdjoint(nn.Conv2d):
            b = F.conv2d(input[l//2:],self.weight*self.mask,self.bias,self.stride,self.padding)
             
            b1 = torch.clone(b)
-           b1[:,self.out_channels//2:] = 0
+           b1[:,self.out_channels//1:] = 0
            b1 = b1*g_weight[0]
            
            b2 = torch.clone(b)
-           b2[:,self.out_channels//4:] = 0
+           b2[:,self.out_channels//2:] = 0
            b2 = b2*g_weight[1]
  
            b3 = torch.clone(b)
-           b3[:,self.out_channels//8:] = 0
+           b3[:,self.out_channels//4:] = 0
            b3 = b3*g_weight[2]
 
            b4 = torch.clone(b)
-           b4[:,self.out_channels//16:] = 0
+           b4[:,self.out_channels//8:] = 0
            b4 = b4*g_weight[3]
 
            #b5 = torch.clone(b)
@@ -97,20 +97,20 @@ class conv2dAdjoint(nn.Conv2d):
            if type(prev_g_weight)==int:
               c_in = self.weight.shape[1]
            else:
-              c_in = ((self.weight.shape[1]//2)*prev_g_weight[0] + 
-                     (self.weight.shape[1]//4)*prev_g_weight[1] + 
-                     (self.weight.shape[1]//8)*prev_g_weight[2] + 
-                     (self.weight.shape[1]//16)*prev_g_weight[3])
+              c_in = ((self.weight.shape[1]//1)*prev_g_weight[0] + 
+                     (self.weight.shape[1]//2)*prev_g_weight[1] + 
+                     (self.weight.shape[1]//4)*prev_g_weight[2] + 
+                     (self.weight.shape[1]//8)*prev_g_weight[3])
                      #(self.weight.shape[1]//64)*prev_g_weight[4]) 
            
            h = input.shape[2]
            w = input.shape[3]
            k = self.weight.shape[2]
 
-           c_out = (((self.out_channels//2)**1)*g_weight[0] +
-                    ((self.out_channels//4)**1)*g_weight[1] +
-                    ((self.out_channels//8)**1)*g_weight[2] +
-                    ((self.out_channels//16)**1)*g_weight[3])
+           c_out = (((self.out_channels//1)**1)*g_weight[0] +
+                    ((self.out_channels//2)**1)*g_weight[1] +
+                    ((self.out_channels//4)**1)*g_weight[2] +
+                    ((self.out_channels//8)**1)*g_weight[3])
                     #((self.out_channels//64)**1)*g_weight[4])
 
            latency += (k * k * h * w * c_in * c_out)
@@ -151,7 +151,7 @@ class AdjointLoss(nn.Module):
     def __init__(self,alpha=1):
         super().__init__()
         self.alpha = alpha
-        self.gamma = 1e-16
+        self.gamma = 1e-17
 
     def forward(self, output, target, latency, architecture_search):
         l,_ = output.shape

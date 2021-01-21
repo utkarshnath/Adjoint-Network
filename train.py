@@ -79,7 +79,7 @@ if __name__ == "__main__":
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
-   architecture_search = False
+   architecture_search = True
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -152,7 +152,7 @@ if __name__ == "__main__":
    if architecture_search == False:
        load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_cifar24816_e16_bs32/145.pt")
    else:
-       cbfs+=[SaveModelCallback('search_cifar24816_e16_bs32')]
+       cbfs+=[SaveModelCallback('search_cifar1248_e17_bs32')]
 
    cbfs += [lossScheduler()]
 
