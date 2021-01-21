@@ -79,7 +79,7 @@ if __name__ == "__main__":
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
-   architecture_search = True
+   architecture_search = False
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -126,7 +126,7 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/resnet50-ind4-imagenet/{}.pt".format(last_epoch_done_idx))
    else:
-      loss_func = AdjointLoss(1) if architecture_search else  AdjointLoss(0)
+      loss_func = AdjointLoss(0)
       cbfs+=[AvgStatsCallback()]
       resnet = args.resnet
       if resnet==18:
@@ -150,9 +150,9 @@ if __name__ == "__main__":
    # model = model.to(device)
    
    if architecture_search == False:
-       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/4-8-16-32/newlat-t15-noschedular-1e-13/145.pt")
+       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_cifar24816_e16_bs32/145.pt")
    else:
-       cbfs+=[SaveModelCallback('search_cifar24816')]
+       cbfs+=[SaveModelCallback('search_cifar24816_e16_bs32')]
 
    cbfs += [lossScheduler()]
 

@@ -22,11 +22,11 @@ def get_default_config(dataset,ngpu=1):
        epoch = 100
        is_sgd = False
     elif dataset == 'cifar100':
-       batch_size = 256
+       batch_size = 32
        image_size = 32
-       lr = 32e-3
+       lr = 4e-3
        c = 100
-       epoch = 350
+       epoch = 150
        is_sgd = False
     elif dataset == 'cifar10':
        batch_size = 64

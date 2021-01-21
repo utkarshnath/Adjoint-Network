@@ -151,7 +151,7 @@ class AdjointLoss(nn.Module):
     def __init__(self,alpha=1):
         super().__init__()
         self.alpha = alpha
-        self.gamma = 1e-13
+        self.gamma = 1e-16
 
     def forward(self, output, target, latency, architecture_search):
         l,_ = output.shape
