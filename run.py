@@ -58,10 +58,10 @@ class Runner():
             self.handle("begin_batch")
             if self.learn.teacher_model == None:
                self.pred, self.latency = self.learn.model(self.xb, self.epoch)
+               self.latency = torch.mean(self.latency)
             else:
                with torch.no_grad(): 
-                    self.teacher_pred = self.learn.teacher_model(self.xb)            
-        
+                    self.teacher_pred = self.learn.teacher_model(self.xb)  
             self.handle("after_pred")                
             
             if self.learn.teacher_model == None:
