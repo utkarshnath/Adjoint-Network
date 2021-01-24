@@ -151,6 +151,9 @@ class AdjointLoss(nn.Module):
     def __init__(self,alpha=1):
         super().__init__()
         self.alpha = alpha
+        # e-10 resnet18
+        # e-13 resnet50
+        # e-16,17 resnet250
         self.gamma = 1e-17
 
     def forward(self, output, target, latency, architecture_search):
@@ -161,7 +164,7 @@ class AdjointLoss(nn.Module):
         prob1 = F.softmax(output[:l//2], dim=-1)
         prob2 = F.softmax(output[l//2:], dim=-1)
         kl = (prob1 * torch.log(1e-6 + prob1/(prob2+1e-6))).sum(1)
-        # print(nll1, kl.mean(), self.gamma * latency)
+        #print(nll1, kl.mean(), self.gamma * latency)
         if architecture_search:
             return nll1 + self.alpha * (kl.mean() + self.gamma * latency)
         else:
