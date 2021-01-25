@@ -24,6 +24,9 @@ def sched_no(start, end, pos):
 def sched_exp(start, end, pos): 
     return start * (end/start) ** pos
 
+@annealer
+def sched_dec10(start, end, pos):
+    return start * 0.1**(pos//(1/3))
 
 def combine_schedules(parts, sched_fns):
     assert sum(parts) == 1.0

@@ -9,7 +9,7 @@ from mask import randomShape,swastik,star,circle,oval,firstLayerMasking,secondLa
 from torch.nn.parameter import Parameter
 from functools import partial
 from torch.autograd import gradcheck
-from schedulers import combine_schedules, sched_cos
+from schedulers import combine_schedules, sched_cos, sched_dec10
 from myconv import myconv2d
 from model import xresnet18,xresnet50,xresnet101
 from modelAdjoint import xresnet_fast18,xresnet_fast50,xresnet_fast101
@@ -91,9 +91,10 @@ if __name__ == "__main__":
    print('*****************************************')
 
    if is_sgd:
-      lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
+      # lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
+      lr_sched = sched_dec10(lr,lr/10)
       lr_scheduler = ParamScheduler('lr', lr_sched,using_torch_optim=True)
-      cbfs = [NormalizeCallback(device),lr_scheduler,CudaCallback()]
+      cbfs = [NormalizeCallback(device),lr_scheduler,CudaCallback(device)]
    else:
       lr_sched = combine_schedules([0.1, 0.9], [sched_cos(lr/10., lr), sched_cos(lr, lr/1e5)])
       beta1_sched = combine_schedules([0.1, 0.9], [sched_cos(0.95, 0.85), sched_cos(0.85, 0.95)])
@@ -101,6 +102,7 @@ if __name__ == "__main__":
       beta1_scheduler = ParamScheduler('beta1', beta1_sched)
       cbfs = [NormalizeCallback(device),lr_scheduler,beta1_scheduler,CudaCallback(device)]
 
+   #cbfs += [DebugTimeCallback()]
    if is_individual_training:
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
@@ -136,8 +138,8 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
    
-   # model = nn.DataParallel(model)
-   # model = model.to(device)
+   model = nn.DataParallel(model)
+   model = model.to(device)
    
    teacher_model = None
    if is_student_teacher:
@@ -150,7 +152,7 @@ if __name__ == "__main__":
    print("Loaded model", end-start)
 
    if is_sgd:
-      opt = optim.SGD(model.parameters(),lr)
+      opt = optim.SGD(model.parameters(),lr, momentum=0.9, weight_decay=1e-4)
    else:
       opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
 

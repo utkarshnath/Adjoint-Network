@@ -83,7 +83,7 @@ def load_data(batch_size, image_size, dataset=1):
     train_transforms = [make_rgb, RandomResizedCrop(image_size, scale=(0.35,1)), PilRandomFlip(), np_to_float]
     valid_transforms = [make_rgb, CenterCrop(image_size), np_to_float]    
 
-    data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=8)
+    data = Data(path, batch_size=batch_size, image_transforms=train_transforms, valid_image_transforms=valid_transforms,num_workers=20)
     print("Loaded data")
     return data
 
