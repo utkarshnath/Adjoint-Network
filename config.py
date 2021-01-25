@@ -1,7 +1,7 @@
 
 def get_default_config(dataset,ngpu=1):
     if dataset=='imagenet' and ngpu==1:
-       batch_size = 32
+       batch_size = 256
        image_size = 224
        lr = 1e-3
        c = 1000

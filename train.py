@@ -79,7 +79,7 @@ if __name__ == "__main__":
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
-   architecture_search = False
+   architecture_search = True
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -146,8 +146,8 @@ if __name__ == "__main__":
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
   
    #cbfs+=[SaveModelCallback('newlat-t15-schedular-1e-13')]
-   #model = nn.DataParallel(model)
-   #model = model.to(device)
+   model = nn.DataParallel(model)
+   model = model.to(device)
    
    if architecture_search == False:
        load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_cifar1248_e17_bs32/146.pt")
