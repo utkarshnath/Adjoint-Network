@@ -26,6 +26,19 @@ class CancelTrainException(Exception): pass
 class CancelEpochException(Exception): pass
 class CancelBatchException(Exception): pass
 
+def updateSequenceOutput(output,ngpu=4):
+    l = output.shape[0]
+    factor = ngpu*2
+    if ngpu==1:
+        return output
+    elif ngpu==3:
+        first = torch.cat([output[:l//factor], output[2*l//factor:3*l//factor],output[4*l//factor:5*l//factor]], dim=0)
+        second = torch.cat([output[l//factor:2*l//factor], output[3*l//factor:4*l//factor],output[5*l//factor:]], dim=0)
+    elif ngpu==4:
+        first = torch.cat([output[:l//factor], output[2*l//factor:3*l//factor],output[4*l//factor:5*l//factor],output[6*l//factor:7*l//factor]], dim=0)
+        second = torch.cat([output[l//factor:2*l//factor], output[3*l//factor:4*l//factor],output[5*l//factor:6*l//factor],output[7*l//factor:]], dim=0)
+    return torch.cat([first,second],dim=0)
+
 class Runner():
     def __init__(self, learn, cbs=None):
         self.learn = learn
@@ -57,6 +70,7 @@ class Runner():
             self.handle("begin_batch")
             if self.learn.teacher_model == None:
                self.pred = self.learn.model(self.xb)
+               self.pred = updateSequenceOutput(self.pred,4)
             else:
                with torch.no_grad(): 
                     self.teacher_pred = self.learn.teacher_model(self.xb)            
