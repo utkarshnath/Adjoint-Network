@@ -15,9 +15,9 @@ def get_default_config(dataset,ngpu=1):
        epoch = 100
        is_sgd = False
     elif dataset == 'imagewoof':
-       batch_size = 32
+       batch_size = 200
        image_size = 224
-       lr = 1e-3
+       lr = 4e-3
        c = 10
        epoch = 100
        is_sgd = False

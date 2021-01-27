@@ -79,7 +79,7 @@ if __name__ == "__main__":
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
-   architecture_search = True
+   architecture_search = False
 
    print('************* Current Settings **********')
    print('dataset',args.dataset)
@@ -145,14 +145,16 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
   
-   #cbfs+=[SaveModelCallback('newlat-t15-schedular-1e-13')]
    model = nn.DataParallel(model)
    model = model.to(device)
    
    if architecture_search == False:
-       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_cifar1248_e17_bs32/146.pt")
+       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124816_e19_X2_bs32/84.pt")
    else:
-       cbfs+=[SaveModelCallback('search_cifar_R18_24816_e10_bs32')]
+       cbfs+=[SaveModelCallback('search_imagewoof_124816_e19_X2_bs32')]
+
+   #model = nn.DataParallel(model)
+   #model = model.to(device)
 
    cbfs += [lossScheduler()]
 

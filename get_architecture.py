@@ -32,12 +32,12 @@ def printModel(path):
         if(k.find("gumbel_noise")!=-1):
           index = torch.argmax(gumbel_softmax(gumbel, v, 0.01, True))
           # print(index, 2**(2+index))
-          mydict = {10:'2',11:'1.5',0:'1',1:'1/2',2:'1/4',3:'1/8',4:'1/16'}
+          mydict = {10:'2',11:'1.5',12:'1',0:'1',1:'1/2',2:'1/4',3:'1/8'}
           if mask:
              compression_list += [mydict[int(index)]]
     return compression_list
 
 
 if __name__ == "__main__":
-   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_cifar1248_e17_bs32/146.pt')
+   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_1248_e20_X2_bs32/78.pt')
    print(compression_list)
