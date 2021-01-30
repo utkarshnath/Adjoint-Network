@@ -8,9 +8,9 @@ def get_default_config(dataset,ngpu=1):
        epoch = 90
        is_sgd = True
     elif dataset=='imagenet' and ngpu==4:
-       batch_size = 200
+       batch_size = 256
        image_size = 224
-       lr = 4e-3
+       lr = 8e-4
        c = 1000
        epoch = 100
        is_sgd = False

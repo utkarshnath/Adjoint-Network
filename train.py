@@ -12,7 +12,7 @@ from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos, sched_dec10
 from myconv import myconv2d
 from model import xresnet18,xresnet50,xresnet101
-from modelAdjoint import xresnet_fast18,xresnet_fast50,xresnet_fast101
+from modelAdjoint import xresnet_fast18,xresnet_fast50,xresnet_fast101,xresnet_fast50X2
 import time
 from adjointNetwork import *
 from optimizers import *
@@ -48,7 +48,7 @@ if __name__ == "__main__":
    device = torch.device('cuda',0)
    # torch.cuda.set_device(device)
    if args.default_config=='True':
-     batch_size, image_size, lr, c, epoch, is_sgd =  get_default_config(args.dataset)
+     batch_size, image_size, lr, c, epoch, is_sgd =  get_default_config(args.dataset,4)
    else:
      batch_size = args.batch_size
      image_size = args.image_size
@@ -102,7 +102,7 @@ if __name__ == "__main__":
       beta1_scheduler = ParamScheduler('beta1', beta1_sched)
       cbfs = [NormalizeCallback(device),lr_scheduler,beta1_scheduler,CudaCallback(device)]
 
-   #cbfs += [DebugTimeCallback()]
+   #cbfs += [SaveModelCallback("Adj-resnet50X2-imagenet")]
    if is_individual_training:
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
@@ -130,6 +130,8 @@ if __name__ == "__main__":
          model = xresnet_fast34(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==50:
          model = xresnet_fast50(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==100:
+         model = xresnet_fast50X2(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==101:
          model = xresnet_fast101(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==152:

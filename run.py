@@ -70,7 +70,7 @@ class Runner():
             self.handle("begin_batch")
             if self.learn.teacher_model == None:
                self.pred = self.learn.model(self.xb)
-               self.pred = updateSequenceOutput(self.pred,4)
+               #self.pred = updateSequenceOutput(self.pred,4)
             else:
                with torch.no_grad(): 
                     self.teacher_pred = self.learn.teacher_model(self.xb)            
