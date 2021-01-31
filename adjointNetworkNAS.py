@@ -74,25 +74,40 @@ class conv2dAdjoint(nn.Conv2d):
         if self.mask_layer:
            b = F.conv2d(input[l//2:],self.weight*self.mask,self.bias,self.stride,self.padding)
             
-           b1 = torch.clone(b)
-           b1[:,self.out_channels//1:] = 0
-           b1 = b1*g_weight[0]
-           
-           b2 = torch.clone(b)
-           b2[:,self.out_channels//2:] = 0
-           b2 = b2*g_weight[1]
- 
-           b3 = torch.clone(b)
-           b3[:,self.out_channels//4:] = 0
-           b3 = b3*g_weight[2]
+           if g_weight[0]!=0:
+              b1 = torch.clone(b)
+              b1[:,self.out_channels//1:] = 0
+              b1 = b1*g_weight[0]
+           else:
+              b1 = 0
+          
+           if g_weight[1]!=0:
+              b2 = torch.clone(b)
+              b2[:,self.out_channels//2:] = 0
+              b2 = b2*g_weight[1]
+           else:
+              b2 = 0
 
-           b4 = torch.clone(b)
-           b4[:,self.out_channels//8:] = 0
-           b4 = b4*g_weight[3]
+           if g_weight[2]!=0:
+              b3 = torch.clone(b)
+              b3[:,self.out_channels//4:] = 0
+              b3 = b3*g_weight[2]
+           else:
+              b3 = 0
 
-           b5 = torch.clone(b)
-           b5[:,self.out_channels//16:] = 0
-           b5 = b5*g_weight[4]
+           if g_weight[3]!=0:
+              b4 = torch.clone(b)
+              b4[:,self.out_channels//8:] = 0
+              b4 = b4*g_weight[3]
+           else:
+              b4 = 0
+
+           if g_weight[4]!=0:
+              b5 = torch.clone(b)
+              b5[:,self.out_channels//16:] = 0
+              b5 = b5*g_weight[4]
+           else:
+              b5 = 0
 
            if type(prev_g_weight)==int:
               c_in = self.weight.shape[1]

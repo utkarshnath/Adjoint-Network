@@ -150,6 +150,7 @@ if __name__ == "__main__":
    
    if architecture_search == False:
        load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124816_e19_X2_bs32/84.pt")
+       cbfs+=[SaveModelCallback('train_imagenet_124816_e19_X2_bs32')]
    else:
        cbfs+=[SaveModelCallback('search_imagewoof_124816_e19_X2_bs32')]
 
