@@ -72,6 +72,8 @@ class Runner():
                self.pred = self.learn.model(self.xb)
                #self.pred = updateSequenceOutput(self.pred,4)
             else:
+               self.pred = self.learn.model(self.xb)
+               self.learn.teacher_model.eval()
                with torch.no_grad(): 
                     self.teacher_pred = self.learn.teacher_model(self.xb)            
         
