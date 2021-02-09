@@ -10,17 +10,17 @@ def get_default_config(dataset,ngpu=1):
     elif dataset=='imagenet' and ngpu==4:
        batch_size = 256
        image_size = 224
-       lr = 1e-3
+       lr = 4e-3
        c = 1000
-       epoch = 100
+       epoch = 60
        is_sgd = False
     elif dataset == 'imagewoof':
        batch_size = 256
        image_size = 224
-       lr = 1e-3
+       lr = 1e-1
        c = 10
        epoch = 90
-       is_sgd = False
+       is_sgd = True
     elif dataset == 'cifar100':
        batch_size = 32
        image_size = 32

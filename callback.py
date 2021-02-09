@@ -192,7 +192,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/model/Adjoint-Experiments/"):
+    def __init__(self,name,save_dir="/scratch/un270/model/Adjoint-Experiments/Feb2020/"):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):
@@ -219,7 +219,7 @@ class InferenceCallback(CallBacks):
 
     def begin_epoch(self):
         if self.in_train: raise CancelEpochException()
- 
+
     def after_epoch(self): raise CancelTrainException()
 
 # should probably run at the end of other call backs

@@ -22,7 +22,7 @@ class Flatten(nn.Module):
 act_func = nn.ReLU()
 
 first = True
-
+count = 0
 def conv(ni, no, ks, s=1, bias=False, expansion=4, compression_factor=4, masking_factor=None):
     if expansion==1:
        # resnet 18
@@ -37,7 +37,11 @@ def conv(ni, no, ks, s=1, bias=False, expansion=4, compression_factor=4, masking
        else:
           mask_layer = False
 
-    global first
+         
+    global first, count
+    count+=1
+    #count>=14
+    #print(ni,no,count)
     if first:
         first = False
         return conv2dFirstLayer(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)

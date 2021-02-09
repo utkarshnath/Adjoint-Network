@@ -11,7 +11,7 @@ from functools import partial
 from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos, sched_dec10
 from myconv import myconv2d
-from model import xresnet18,xresnet50,xresnet101
+from model import xresnet18,xresnet50,xresnet101,xresnet100
 from modelAdjoint import xresnet_fast18,xresnet_fast50,xresnet_fast101,xresnet_fast50X2
 import time
 from adjointNetwork import *
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
    data_resize = partial(dataset_resize,image_size)
    is_individual_training = False if args.is_adjoint_training=='True' else True
-   last_epoch_done_idx = 33
+   last_epoch_done_idx = None
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
    is_student_teacher = False
@@ -102,7 +102,7 @@ if __name__ == "__main__":
       beta1_scheduler = ParamScheduler('beta1', beta1_sched)
       cbfs = [NormalizeCallback(device),lr_scheduler,beta1_scheduler,CudaCallback(device)]
 
-   #cbfs += [SaveModelCallback("cifar100-individual-18-bs32")]
+   cbfs += [SaveModelCallback("ind-resnet100-256-4e-3")]
    if is_individual_training:
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
@@ -113,6 +113,8 @@ if __name__ == "__main__":
           model = xresnet34(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==50:
           model = xresnet50(c_out=c,resize=data_resize,compression_factor=compression_factor)
+      elif resnet==100:
+         model = xresnet100(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==101:
          model = xresnet101(c_out=c,resize=data_resize,compression_factor=compression_factor)
       elif resnet==152:
@@ -121,7 +123,8 @@ if __name__ == "__main__":
          print("Resnet model supported are 18, 34, 50, 101, 152")
       #if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/resnet50-ind4-imagenet/{}.pt".format(last_epoch_done_idx))
    else:
-      loss_func = AdjointLoss(4*(29/100)**2)
+      loss_func = AdjointLoss(0)
+      #loss_func = AdjointLoss(4*(29/100)**2)  for resuming training
       cbfs+=[lossScheduler(),AvgStatsCallback()]
       resnet = args.resnet
       if resnet==18:
@@ -142,7 +145,7 @@ if __name__ == "__main__":
    model = nn.DataParallel(model)
    model = model.to(device)
 
-   if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adjoint-Experiments/Ind-resnet50-imagenet-256-1e-3/{}.pt".format(last_epoch_done_idx))
+   if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adjoint-Experiments/Feb2020/Ind-resnet50-imagenet-256-1e-3/{}.pt".format(last_epoch_done_idx))
    
    teacher_model = None
    if is_student_teacher:
