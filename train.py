@@ -12,9 +12,11 @@ from torch.autograd import gradcheck
 from schedulers import combine_schedules, sched_cos
 from myconv import myconv2d
 from model import xresnet18,xresnet50,xresnet101
-from modelNAS import xresnet_fast18,xresnet_fast50,xresnet_fast50X2,xresnet_fast101
+from modelNAS import xresnet_fast18 as DAN18,xresnet_fast34 as DAN34,xresnet_fast50 as DAN50 ,xresnet_fast100 as DAN100, xresnet_fast101 as DAN101
+from modelAdjoint import xresnet_fast18,xresnet_fast50,xresnet_fast101,xresnet_fast100
 import time
-from adjointNetworkNAS import *
+from adjointNetworkNAS import AdjointLoss as AdjointLossDAN
+from adjointNetwork import AdjointLoss
 from optimizers import *
 import argparse
 from config import *
@@ -31,6 +33,9 @@ parser.add_argument('--classes', type=int, default=100, help='')
 parser.add_argument("--epoch", type=int, default=100, help="")
 parser.add_argument("--resnet", type=int, default=50, help="")
 parser.add_argument("--dataset", type=str, default='cifar100', help="")
+parser.add_argument('--training_type', type=int, default=1, help='')
+parser.add_argument('--gamma', type=float, default=1e-13, help='')
+parser.add_argument("--DAN_architecture", type=str, default='', help="path for architecture found by DAN search")
 parser.add_argument("--default_config", type=str, default='True', help="")
 args = parser.parse_args()
 
@@ -51,6 +56,9 @@ def dataset_resize(image_size,x): return x.view(-1, 3, image_size, image_size)
 if __name__ == "__main__":
    start = time.time()
    device = torch.device('cuda',0)
+   n_gpu = torch.cuda.device_count()
+   if n_gpu!=1 or n_gpu!=4:
+       print('Currently, we only support 1 or 4 GPU for Adjoint Training or DAN training')
    # torch.cuda.set_device(device)
    if args.default_config=='True':
      batch_size, image_size, lr, c, epoch, is_sgd =  get_default_config(args.dataset)
@@ -78,9 +86,13 @@ if __name__ == "__main__":
    last_epoch_done_idx = None
    compression_factor = args.compression_factor
    masking_factor = args.masking_factor
-   is_student_teacher = False
-   architecture_search = False
-
+   training_type = args.training_type
+   is_individual_training = training_type==0
+   is_student_teacher = training_type==4
+   DAN_architecture_path = args.DAN_architecture
+   architecture_search = training_type==2
+   gamma = args.gamma
+   train_type_dict = {0:'Individual',1:'Adjoint Training', 2:'DAN Search', 3:'DAN Training', 4:'Student Teacher'}
    print('************* Current Settings **********')
    print('dataset',args.dataset)
    print('batch_size',batch_size)
@@ -89,12 +101,9 @@ if __name__ == "__main__":
    print('c',c)
    print('epoch',epoch)
    print('is sgd',is_sgd)
-   print('is_individual_training',is_individual_training)
+   print('training_type', train_type_dict[training_type])
    print('compression_factor',compression_factor)
-   print('masking_factor',masking_factor)
    print('resnet',args.resnet)
-   print('is_student_teacher',is_student_teacher)
-   print('architecture_search', architecture_search)
    print('*****************************************')
 
    if is_sgd:
@@ -108,7 +117,7 @@ if __name__ == "__main__":
       beta1_scheduler = ParamScheduler('beta1', beta1_sched)
       cbfs = [NormalizeCallback(device),lr_scheduler,beta1_scheduler,CudaCallback(device)]
 
-   if is_individual_training:
+   if training_type==0:
       loss_func = F.cross_entropy
       cbfs+=[AvgStatsCallback(metrics=[accuracy,top_k_accuracy])]
       resnet = args.resnet
@@ -124,44 +133,58 @@ if __name__ == "__main__":
           model = xresnet152(c_out=c,resize=data_resize,compression_factor=compression_factor)
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
-      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/resnet50-ind4-imagenet/{}.pt".format(last_epoch_done_idx))
-   else:
-      loss_func = AdjointLoss(0)
-      cbfs+=[AvgStatsCallback()]
+   elif training_type==2 or training_type==3:
+      loss_func = AdjointLossDAN(0, gamma)
+      cbfs+=[lossScheduler(),AvgStatsCallback()]
       resnet = args.resnet
       if resnet==18:
-         model = xresnet_fast18(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = DAN18(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==34:
-         model = xresnet_fast34(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = DAN34(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==50:
-         model = xresnet_fast50(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
-      elif resnet==250:
-         model = xresnet_fast50X2(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = DAN50(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==100:
+         model = DAN100(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==101:
-         model = xresnet_fast101(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = DAN101(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       elif resnet==152:
-         model = xresnet_fast152(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
+         model = DAN152(c_out=c, resize=data_resize, architecture_search=architecture_search, compression_factor=compression_factor, masking_factor=masking_factor)
       else:
          print("Resnet model supported are 18, 34, 50, 101, 152")
-      if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
+   elif training_type==1 or training_type==4:
+      loss_func = AdjointLoss(0)
+      #loss_func = AdjointLoss(4*(29/100)**2)  for resuming training
+      cbfs+=[lossScheduler(),AvgStatsCallback()]
+      resnet = args.resnet
+      if resnet==18:
+         model = xresnet_fast18(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==34:
+         model = xresnet_fast34(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==50:
+         model = xresnet_fast50(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==100:
+         model = xresnet_fast100(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==101:
+         model = xresnet_fast101(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      elif resnet==152:
+         model = xresnet_fast152(c_out=c, resize=data_resize, compression_factor=compression_factor, masking_factor=masking_factor)
+      else:
+         print("Resnet model supported are 18, 34, 50, 101, 152")
+   
+   if last_epoch_done_idx is not None: model = load_model(model, state_dict_file_path="/scratch/un270/model/Adj-resnet50-imagenet-60epoch-adam/{}.pt".format(last_epoch_done_idx))
   
    model = nn.DataParallel(model)
    model = model.to(device)
    
-   if architecture_search == False:
-       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124_e19_X2/79.pt")
-       cbfs+=[SaveModelCallback('train_imagenet_124_e19_X2')]
-   else:
-       cbfs+=[SaveModelCallback('search_imagewoof_124_e19_X2')]
-
-   #model = nn.DataParallel(model)
-   #model = model.to(device)
-
-   cbfs += [lossScheduler()]
+   if training_type == 3:
+       load_searched_model(model, DAN_architecture_path)
+       cbfs+=[SaveModelCallback('DAN_train')]
+   elif training_type==2:
+       cbfs+=[SaveModelCallback('DAN_Search')]
 
 
    teacher_model = None
-   if is_student_teacher:
+   if training_type ==4:
       teacher_model = xresnet18(c_out=c,resize=data_resize)
       teacher_model = load_model(teacher_model, state_dict_file_path='/scratch/un270/model/{}-individual-18/{}.pt'.format(args.dataset,epoch-1))
       teacher_model.cuda()
@@ -175,8 +198,10 @@ if __name__ == "__main__":
    else:
       opt = StatefulOptimizer(model.parameters(), [weight_decay, adam_step],stats=[AverageGrad(), AverageSqGrad(), StepCount()], lr=0.001, wd=1e-2, beta1=0.9, beta2=0.99, eps=1e-6)
 
-   learn = Learn(model,opt,loss_func, data,teacher_model,architecture_search)
-   
 
+   
+   learn = Learn(model,opt,loss_func, data, n_gpu, teacher_model, training_type, architecture_search)
+   
+  
    run = Runner(learn,cbs = cbfs)
    run.fit(epoch, start_epoch = 0 if last_epoch_done_idx is None else last_epoch_done_idx+1)

@@ -15,12 +15,21 @@ class DataBunch():
         return self.valid_dl.dataset
 
 
+#training_type
+# 0 Individual
+# 1 Adjoint Training
+# 2 DAN Search
+# 3 DAN Training
+# 4 Teacher Student
+
 class Learn():
-    def __init__(self, model, opt, loss_func, data, teacher_model=None, architecture_search=False):
+    def __init__(self, model, opt, loss_func, data, n_gpu, teacher_model=None, training_type=1,architecture_search=False):
         self.model, self.opt = model, opt 
         self.loss_func, self.data = loss_func, data
+        self.n_gpu = n_gpu
         self.teacher_model = teacher_model
-        self.architecture_search = architecture_search
+        self.training_type = training_type
+        self.architecture_search = training_type==2
 
 
 class CancelTrainException(Exception): pass
@@ -69,19 +78,27 @@ class Runner():
             self.args = args
              
             self.handle("begin_batch")
-            if self.learn.teacher_model == None:
-               self.pred, self.latency = self.learn.model(self.xb, self.epoch)
-               self.pred = updateSequenceOutput(self.pred)
-               self.latency = torch.mean(self.latency)
+            if self.learn.teacher_model != None:
+                with torch.no_grad():
+                    self.teacher_pred = self.learn.teacher_model(self.xb)
+            elif self.learn.training_type == 0 or self.learn.training_type == 1:
+                 self.pred = self.learn.model(self.xb)
             else:
-               with torch.no_grad(): 
-                    self.teacher_pred = self.learn.teacher_model(self.xb)  
+               self.pred, self.latency = self.learn.model(self.xb, self.epoch)
+               self.latency = torch.mean(self.latency)
+            
+            if self.learn.n_gpu==4 and (self.learn.training_type==1 or self.learn.training_type==2 or self.learn.training_type==3):
+                self.pred = updateSequenceOutput(self.pred, 4)
+
             self.handle("after_pred")                
             
-            if self.learn.teacher_model == None:
-               self.loss = self.learn.loss_func(self.pred,self.yb,self.latency, self.learn.architecture_search)
+            if self.learn.teacher_model != None:
+                self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
+            elif self.learn.training_type == 0 or self.learn.training_type == 1:
+                self.loss = self.learn.loss_func(self.pred,self.yb)
             else:
-               self.loss = self.learn.loss_func(self.teacher_pred,self.pred,self.yb)
+               self.loss = self.learn.loss_func(self.pred,self.yb,self.latency, self.learn.architecture_search)
+            
             self.handle("after_loss")
             
             if not self.in_train: return 

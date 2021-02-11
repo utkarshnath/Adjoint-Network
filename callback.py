@@ -1,9 +1,12 @@
 import time, datetime
 import torch
+from torch import nn, tensor
 import torch.nn.functional as F
 import torch.nn as nn
 import os
-from adjointNetworkNAS import *
+# from adjointNetworkNAS import *
+from adjointNetworkNAS import AdjointLoss as AdjointLossDAN
+from adjointNetwork import AdjointLoss
 from run import CancelTrainException, CancelEpochException, CancelBatchException
 import matplotlib.pyplot as plt
 import numpy as np
@@ -63,12 +66,17 @@ class CudaCallback(CallBacks):
     def begin_batch(self): self.run.xb,self.run.yb = self.xb.to(self.device),self.yb.to(self.device)
 
 class lossScheduler(CallBacks):
+    def __init__(self,gamma=1e-13):
+        self.gamma = gamma
+
     def after_epoch(self):
         x = self.epoch/self.epochs
         #self.learn.loss_func = AdjointLoss(np.e**x - 1)
-        self.learn.loss_func = AdjointLoss(min(4*(x**2),1))
-           
-           
+        if self.learn.training_type==1 or self.learn.training_type==4:
+           self.learn.loss_func = AdjointLoss(min(4*(x**2),1))
+        elif self.learn.training_type==2 or self.learn.training_type==3:
+            self.learn.loss_func = AdjointLossDAN(min(4*(x**2),1), self.gamma)
+              
                          
 class Stats():
     def __init__(self, metrics, in_train):
@@ -193,7 +201,7 @@ class Recorder(CallBacks):
         plt.show()
 
 class SaveModelCallback(CallBacks):
-    def __init__(self,name,save_dir="/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/"):
+    def __init__(self,name,save_dir=""):
         model_directory = os.path.join(save_dir,name)
         self.name = name
         if not os.path.isdir(model_directory):
