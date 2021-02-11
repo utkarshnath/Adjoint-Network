@@ -149,19 +149,16 @@ if __name__ == "__main__":
    model = model.to(device)
    
    if architecture_search == False:
-       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124816_e19_X2_bs32/84.pt")
-       cbfs+=[SaveModelCallback('train_imagenet_124816_e19_X2_bs32')]
+       load_searched_model(model, "/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124_e19_X2/79.pt")
+       cbfs+=[SaveModelCallback('train_imagenet_124_e19_X2')]
    else:
-       cbfs+=[SaveModelCallback('search_imagewoof_124816_e19_X2_bs32')]
+       cbfs+=[SaveModelCallback('search_imagewoof_124_e19_X2')]
 
    #model = nn.DataParallel(model)
    #model = model.to(device)
 
    cbfs += [lossScheduler()]
 
-   #type 1,2
-   #loss_func = AdjointLoss(0)
-   #cbfs += [lossScheduler()]
 
    teacher_model = None
    if is_student_teacher:

@@ -19,12 +19,17 @@ def printModel(path):
     noise = None
     mask = False
     i = 0
+    count = 0
     compression_list = []
     for k,v in state_dict.items():
         #if(len(v.shape)==4):
         #  print(v.shape)
         if(k.find('initial_layers')!=-1):
            continue
+        if (len(v.shape)==4):
+            count+=1
+        #if count>=14:
+        #    mask = True
         if(len(v.shape)==4 and v.shape[0]>64 and v.shape[1]>64):
           mask = True
         if(k.find("gumbel_weight")!=-1):
@@ -32,12 +37,13 @@ def printModel(path):
         if(k.find("gumbel_noise")!=-1):
           index = torch.argmax(gumbel_softmax(gumbel, v, 0.01, True))
           # print(index, 2**(2+index))
-          mydict = {10:'2',11:'1.5',12:'1',0:'1',1:'1/2',2:'1/4',3:'1/8'}
+          mydict = {0:1,1:2,2:4}
+          #mydict = {10:'2',11:'1.5',12:'1',0:'1',1:'1/2',2:'1/4',3:'1/8'}
           if mask:
              compression_list += [mydict[int(index)]]
     return compression_list
 
 
 if __name__ == "__main__":
-   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_1248_e20_X2_bs32/78.pt')
-   print(compression_list)
+   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124_e19_X2_smaller/90.pt')
+   print(len(compression_list))

@@ -152,16 +152,16 @@ def printModel(path):
           index = torch.argmax(gumbel_softmax(gumbel, v, 0.01, True))
           # print(index, 2**(2+index))
           if mask:
-             compression_list += [int(2**(2+index))]
+             compression_list += [int(2**(1+index))]
     return compression_list
     
 if __name__ == "__main__":
-   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/1e-7/cifar-4-8-16-noschedular-1e-10-sq/148.pt')
+   compression_list = printModel('/scratch/un270/model/Adjoint-Experiments/Nas/updated_config/search_imagewoof_124_e19_X2/79.pt')
    print(compression_list)
    #print(len(compression_list))
    index = 0
-   model = xresnet50(c_out=100,compression_factor=1)
-   print(index)
+   #model = xresnet50(c_out=100,compression_factor=1)
+   #print(index)
    #model= xresnet_fast50(c_out=100, compression_factor=1, masking_factor=None, architectur_search=False)
    '''
    model = xresnet50(c_out=100,compression_factor=64)

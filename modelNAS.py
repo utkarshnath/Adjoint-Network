@@ -35,7 +35,7 @@ class Relu(nn.Module):
 act_func = Relu()
 
 first = True
-
+count = 0
 def conv(ni, no, ks, s=1, bias=False, expansion=4, architecture_search=False, compression_factor=4, masking_factor=None):
     if expansion==1:
        # resnet 18
@@ -50,7 +50,10 @@ def conv(ni, no, ks, s=1, bias=False, expansion=4, architecture_search=False, co
        else:
           mask_layer = False
     
-    global first
+    global first,count
+    count+=1
+    #if count>=14:
+    #    mask_layer = True
     if first:
         first = False
         return conv2dFirstLayer(ni, no, kernel_size=ks, stride=s, padding=ks//2, bias=bias)

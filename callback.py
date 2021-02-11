@@ -92,7 +92,6 @@ class Stats():
 
     def accumulate(self, run):
         batch_size = run.xb.shape[0]
-
         self.tol_loss += batch_size * run.loss.cpu()
         for i, metric in enumerate(self.metrics):
             self.tol_metrics[i] += batch_size * metric(run.pred, run.yb)
