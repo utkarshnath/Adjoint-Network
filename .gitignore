@@ -1,6 +1,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.fastai/
+*.swp
+*.swo
+*.pyc
 
 # C extensions
 *.so
