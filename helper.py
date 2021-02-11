@@ -57,11 +57,11 @@ def get_data_bunch(batch_size):
 
 def load_cifar_data(batch_size, image_size,size):
     if size==10:
-       # path = untar_data(URLs.CIFAR)
-       path = '/scratch/un270/.fastai/data/cifar10'
+       path = untar_data(URLs.CIFAR)
+       #path = '/scratch/un270/.fastai/data/cifar10'
     else:
-       # path = untar_data(URLs.CIFAR_100)
-       path = '/scratch/un270/.fastai/data/cifar100'
+       path = untar_data(URLs.CIFAR_100)
+       #path = '/scratch/un270/.fastai/data/cifar100'
     stats = (np.array([ 0.4914 ,  0.48216,  0.44653]), np.array([ 0.24703,  0.24349,  0.26159]))
     
     tfms = (get_transforms(do_flip=True,flip_vert=False,max_rotate=25))
@@ -88,8 +88,8 @@ def load_data(batch_size, image_size, dataset=1):
     return data
 
 def load_fastai_data(batch_size, image_size):
-    #path = untar_data(URLs.PETS)
-    path_img = '/scratch/un270/oxford-iiit-pet/images'
+    path = untar_data(URLs.PETS)
+    #path_img = '/scratch/un270/oxford-iiit-pet/images'
     fnames = get_image_files(path_img)
     pat = r'/([^/]+)_\d+.jpg$'
     data = ImageDataBunch.from_name_re(path_img, fnames, pat, ds_tfms=get_transforms(), size=image_size, bs=batch_size).normalize(imagenet_stats)
