@@ -42,7 +42,7 @@ eg. <code> python train.py --dataset cifar100 --default_config False --compressi
   </tr>
   <tr>
     <td>DAN_architecture</td>
-    <td>Path for architecture found by DAN search</td>
+    <td>Path for architecture found by DAN search (to be used with DAN training)</td>
     <td>String</td>
   </tr>
   <tr>
