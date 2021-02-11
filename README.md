@@ -37,7 +37,10 @@ eg. <code> python train.py --dataset cifar100 --default_config False --compressi
   </tr>
   <tr>
     <td>training_type</td>
-    <td>0 for Standard Training, 1 for Adjoint Training, 3 for DAN Search, 4 for DAN training</td>
+    <td>0 for Standard Training, <br>
+      1 for Adjoint Training, <br>
+      3 for DAN Search, <br>
+      4 for DAN training</td>
     <td>{0,1,2,3}</td>
   </tr>
   <tr>
