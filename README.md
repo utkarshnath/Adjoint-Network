@@ -67,7 +67,7 @@ eg. <code> python train.py --dataset cifar100 --default_config False --compressi
   </tr>
   <tr>
     <td>resnet</td>
-    <td>the resnet model to be used</td>
+    <td>The resnet model to be used</td>
     <td>{18,34,50,100,101,152}</td>
   </tr>
   <tr>
