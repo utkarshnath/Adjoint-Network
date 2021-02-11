@@ -17,7 +17,7 @@
 
 # Running
 <code> python train.py --dataset cifar100 --compression_factor 16 --training_type 1 </code> <br/>
-Running the above command would use default value for batch_size, image_size, lr, c, epoch and is_sgd. <br/>
+Running the above command would use default value for batch_size, image_size, lr, c, epoch and is_sgd and run Adjoint Training <br/>
 If you want to change anyone of these value then use <code>--default_config False</code> <br/>
 eg. <code> python train.py --dataset cifar100 --default_config False --compression_factor 16 --training_type 1 --lr 0.1 </code> 
 
