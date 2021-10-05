@@ -1,4 +1,4 @@
-# Adjoint-Network
+# Adjoined-Network
 
 
 
@@ -16,10 +16,10 @@
 5. conda install -c anaconda ipython <br/>
 
 # Running
-<code> python train.py --dataset cifar100 --compression_factor 16 --masking_factor 0.5 </code> <br/>
-Running the above command would use default value for batch_size, image_size, lr, c, epoch and is_sgd. <br/>
+<code> python train.py --dataset cifar100 --compression_factor 8 --training_type 1</code> <br/>
+Running the above command would use default value (set in config.py) for batch_size, image_size, lr, c, epoch and is_sgd. <br/>
 If you want to change anyone of these value then use <code>--default_config False</code> <br/>
-eg. <code> python train.py --dataset cifar100 --default_config False --compression_factor 16 --masking_factor 0.5 --lr 0.1 </code> 
+eg. <code> python train.py --dataset cifar100 --default_config False --compression_factor 16 --lr 0.1 --training_type 1 </code> 
 
 
 **Arguments** <br/>
@@ -29,6 +29,11 @@ eg. <code> python train.py --dataset cifar100 --default_config False --compressi
     <th>Argument</th>
     <th>Discription</th>
     <th>Domain</th>
+  </tr>
+  <tr>
+    <td>training_type</td>
+    <td>Used to denote training type. 0: Standard training, 1: AN, 2:DAN Seacher, 3:DAN Training, 4: Teacher Student</td>
+    <td>{0,1,2,3,4}</td>
   </tr>
   <tr>
     <td>lr</td>
@@ -56,19 +61,14 @@ eg. <code> python train.py --dataset cifar100 --default_config False --compressi
     <td>Integer</td>
   </tr>
   <tr>
-    <td>masking_factor</td>
-    <td>Used to denote fraction of weight converted to zero in each kernel. Default value is None</td>
-    <td>(0,1)</td>
-  </tr>
-  <tr>
     <td>resnet</td>
     <td>the resnet model to be used</td>
     <td>{18,34,50,101,152}</td>
   </tr>
   <tr>
     <td>dataset</td>
-    <td>Dataset supported are cifar100, cifar10, imagenet, imagewoof and Oxford-IIIT Pet</td>
-    <td>{cifar100,cifar10,imagenet,imagewoof,pets}</td>
+    <td>Dataset supported are cifar100, imagenet</td>
+    <td>{cifar100,imagenet}</td>
   </tr>
   <tr>
     <td>default_config</td>
